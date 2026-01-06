@@ -8,7 +8,7 @@
  */
 
 import { createExtractor, definePlugin } from '../../src/index.js';
-import type { Plugin, ExtractorContext, Kernel, APIEntry } from '../../src/types.js';
+import type { Plugin, ExtractorContext, Kernel } from '../../src/types.js';
 
 /**
  * Generate documentation in Cursor/Copilot rules format
@@ -118,13 +118,9 @@ function createCursorOutputPlugin(): Plugin {
     category: 'output',
 
     install(kernel: Kernel<ExtractorContext>) {
-      kernel.on('output:generate', async (ctx: ExtractorContext) => {
-        // Generate our custom format
+      kernel.on('output:start', async (ctx: ExtractorContext) => {
         const cursorRules = generateCursorRules(ctx);
-
-        // Store it with a custom key
-        // Note: We use 'cursor' but it won't appear unless formats includes it
-        ctx.outputs.set('cursor' as 'llms', cursorRules);
+        ctx.outputs.set('cursor', cursorRules);
       });
     },
   });
@@ -175,18 +171,16 @@ function createYAMLOutputPlugin(): Plugin {
     category: 'output',
 
     install(kernel: Kernel<ExtractorContext>) {
-      kernel.on('output:generate', async (ctx: ExtractorContext) => {
+      kernel.on('output:start', async (ctx: ExtractorContext) => {
         const yaml = generateYAML(ctx);
-        ctx.outputs.set('yaml' as 'llms', yaml);
+        ctx.outputs.set('yaml', yaml);
       });
     },
   });
 }
 
 async function main() {
-  const extractor = createExtractor({
-    verbose: true,
-  });
+  const extractor = createExtractor();
 
   // Register custom output plugins
   extractor.use(createCursorOutputPlugin());
@@ -194,12 +188,14 @@ async function main() {
 
   console.log('Extracting with custom output formats...\n');
 
+  // Note: ignoreCache is required to run custom plugins on cached packages
   const result = await extractor.extract('ms', {
     formats: ['llms'],
     llmsTokenLimit: 2000,
+    ignoreCache: true,
   });
 
-  // The custom outputs are accessible even if not in formats array
+  // Custom outputs are available alongside standard formats
   console.log('=== Cursor Rules Format ===\n');
   console.log(result.outputs['cursor']);
 

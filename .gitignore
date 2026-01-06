@@ -7,6 +7,7 @@ dist/
 # Cache
 .npm-llms-cache/
 .cache/
+.test-cache-*/
 
 # IDE
 .idea/
@@ -37,6 +38,16 @@ coverage/
 .env.local
 .env.*.local
 
+# Example outputs
+output/
+batch-output/
+
+# Generated docs (regenerate with npm-llms)
+.llms/
+
 # Website
 website/node_modules/
 website/dist/
+
+# Claude Code
+.claude/

@@ -425,8 +425,8 @@ export interface ExtractorContext {
   /** Extract options */
   options: ExtractOptions;
 
-  /** Generated outputs by format */
-  outputs: Map<OutputFormat, string>;
+  /** Generated outputs by format (supports custom formats from plugins) */
+  outputs: Map<OutputFormat | string, string>;
 
   /** Token count for llms.txt */
   tokenCount: number;
