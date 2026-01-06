@@ -1,0 +1,10 @@
+{
+  "name": "sample-package",
+  "version": "1.0.0",
+  "description": "A sample package for testing",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "keywords": ["sample", "test"],
+  "author": "Test Author",
+  "license": "MIT"
+}

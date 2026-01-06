@@ -1,0 +1,111 @@
+# @oxog/npm-llms
+
+> Extract LLM-optimized documentation from NPM packages with zero runtime dependencies
+
+## Install
+
+```bash
+npm install @oxog/npm-llms
+```
+
+## Quick Start
+
+```typescript
+import { createExtractor, extract } from '@oxog/npm-llms';
+
+// Simple one-liner
+const result = await extract('zod');
+console.log(result.outputs['llms']); // llms.txt content
+
+// With configuration
+const extractor = createExtractor({
+  cache: { enabled: true, ttl: 604800000 },
+});
+
+const result = await extractor.extract('lodash', {
+  formats: ['llms', 'markdown'],
+  llmsTokenLimit: 2000,
+});
+```
+
+## CLI Usage
+
+```bash
+npm-llms extract zod --llms
+npm-llms extract lodash --all -o ./docs
+npm-llms extract @anthropic-ai/sdk --json --stdout
+npm-llms cache-clear
+```
+
+## API
+
+### Functions
+
+- `createExtractor(options?)` - Create extractor with options
+- `extract(packageSpec, options?)` - Quick extract (creates temp extractor)
+
+### Options
+
+```typescript
+interface ExtractorOptions {
+  cache?: { enabled: boolean; dir: string; ttl: number };
+  registry?: string;  // NPM registry URL
+  verbose?: boolean;
+}
+
+interface ExtractOptions {
+  formats?: ('llms' | 'llms-full' | 'markdown' | 'json')[];
+  llmsTokenLimit?: number;  // Default: 2000
+  prioritize?: ('functions' | 'classes' | 'examples' | 'readme')[];
+  ignoreCache?: boolean;
+}
+```
+
+### Result
+
+```typescript
+interface ExtractResult {
+  package: { name: string; version: string; description?: string };
+  api: APIEntry[];       // Parsed API entries
+  outputs: Record<string, string>;  // Generated docs by format
+  tokenCount: number;    // Tokens in llms.txt
+  truncated: boolean;    // If content was truncated
+  fromCache: boolean;
+  duration: number;      // Extraction time in ms
+}
+```
+
+## Output Formats
+
+- **llms.txt** - Token-limited (default 2000) summary
+- **llms-full.txt** - Complete API documentation
+- **markdown** - API.md with tables and examples
+- **json** - Structured JSON for programmatic use
+
+## Plugin System
+
+```typescript
+import { definePlugin, createKernel } from '@oxog/npm-llms';
+
+const myPlugin = definePlugin({
+  name: 'my-plugin',
+  version: '1.0.0',
+  category: 'output',
+  install(kernel) {
+    kernel.on('output:generate', async (ctx) => {
+      // Custom output generation
+    });
+  },
+});
+
+const extractor = createExtractor();
+extractor.use(myPlugin);
+```
+
+## Error Codes
+
+- `PKG_NOT_FOUND` - Package doesn't exist
+- `VERSION_NOT_FOUND` - Version doesn't exist
+- `DOWNLOAD_FAILED` - Network error
+- `PARSE_ERROR` - Parse failure
+- `CACHE_ERROR` - Cache read/write error

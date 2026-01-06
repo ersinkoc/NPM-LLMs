@@ -1,0 +1,87 @@
+{
+  "name": "@oxog/npm-llms",
+  "version": "1.0.0",
+  "description": "Extract LLM-optimized documentation (llms.txt, llms-full.txt) from any NPM package with AI enrichment",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "npm-llms": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./plugins": {
+      "import": {
+        "types": "./dist/plugins/index.d.ts",
+        "default": "./dist/plugins/index.js"
+      },
+      "require": {
+        "types": "./dist/plugins/index.d.cts",
+        "default": "./dist/plugins/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm run test:coverage"
+  },
+  "keywords": [
+    "llms",
+    "llms-txt",
+    "documentation",
+    "npm",
+    "api-docs",
+    "typescript",
+    "zero-dependency",
+    "ai",
+    "claude",
+    "openai",
+    "cursor",
+    "windsurf"
+  ],
+  "author": "Ersin Koç",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ersinkoc/npm-llms.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ersinkoc/npm-llms/issues"
+  },
+  "homepage": "https://npm-llms.oxog.dev",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
