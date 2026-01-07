@@ -236,7 +236,7 @@ describe('generateLlmsTxt', () => {
 });
 
 describe('DEFAULT_LLMS_TOKEN_LIMIT', () => {
-  it('should be 2000', () => {
-    expect(DEFAULT_LLMS_TOKEN_LIMIT).toBe(2000);
+  it('should be Infinity (no limit by default)', () => {
+    expect(DEFAULT_LLMS_TOKEN_LIMIT).toBe(Infinity);
   });
 });

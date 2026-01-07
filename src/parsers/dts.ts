@@ -56,8 +56,14 @@ const PATTERNS = {
   /** Import statement */
   importStatement: /import\s*(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s*from\s*['"]([^'"]+)['"]/g,
 
-  /** Declare module */
+  /** Declare module (module augmentation) */
   declareModule: /declare\s+module\s+['"]([^'"]+)['"]\s*\{/g,
+
+  /** Interface inside module augmentation (no export keyword) */
+  moduleInterface: /interface\s+(\w+)(?:\s*<([^>]*)>)?(?:\s+extends\s+([^{]+))?\s*\{/g,
+
+  /** Declare namespace */
+  declareNamespace: /declare\s+namespace\s+(\w+)\s*\{/g,
 };
 
 /**
@@ -491,7 +497,117 @@ export function parseDts(content: string, filePath?: string): DtsParseResult {
     }
   }
 
+  // Parse module augmentation (declare module "..." { ... })
+  // This is common in @types packages like @types/lodash
+  PATTERNS.declareModule.lastIndex = 0;
+  while ((match = PATTERNS.declareModule.exec(content)) !== null) {
+    const moduleBodyStart = match.index + match[0].length - 1;
+    const moduleBody = extractBody(content, moduleBodyStart);
+
+    // Parse interfaces inside module augmentation
+    const moduleExports = parseModuleAugmentation(moduleBody, comments, moduleBodyStart, filePath);
+    for (const entry of moduleExports) {
+      exports.push(entry);
+    }
+  }
+
   return { exports, imports, moduleName };
+}
+
+/**
+ * Parse module augmentation content (interfaces inside declare module blocks)
+ * Extracts methods from interfaces like LoDashStatic as standalone functions
+ */
+function parseModuleAugmentation(
+  body: string,
+  _comments: Array<{ comment: string; start: number; end: number }>,
+  _bodyOffset: number,
+  filePath?: string
+): APIEntry[] {
+  const entries: APIEntry[] = [];
+
+  // Extract JSDoc comments from the module body itself
+  const moduleComments = extractJSDocComments(body);
+
+  // Find interfaces inside the module augmentation
+  const interfacePattern = /interface\s+(\w+)(?:\s*<([^>]*)>)?(?:\s+extends\s+([^{]+))?\s*\{/g;
+  let match;
+
+  while ((match = interfacePattern.exec(body)) !== null) {
+    const [, interfaceName, generics, extendsClause] = match;
+    if (!interfaceName) continue;
+
+    // Extract interface body
+    const ifaceBodyStart = match.index + match[0].length - 1;
+    const ifaceBody = extractBody(body, ifaceBodyStart);
+
+    // For interfaces like LoDashStatic, extract methods as standalone functions
+    // These are the main API methods of lodash
+    if (interfaceName === 'LoDashStatic' || interfaceName.endsWith('Static')) {
+      const methods = parseInterfaceMethodsAsExports(
+        ifaceBody,
+        moduleComments,
+        ifaceBodyStart,
+        filePath
+      );
+      for (const method of methods) {
+        entries.push(method);
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Parse interface methods and convert them to standalone function exports
+ * Used for extracting lodash-style static methods from interfaces like LoDashStatic
+ */
+function parseInterfaceMethodsAsExports(
+  body: string,
+  _comments: Array<{ comment: string; start: number; end: number }>,
+  _bodyOffset: number,
+  filePath?: string
+): APIEntry[] {
+  const methods: APIEntry[] = [];
+
+  // Extract JSDoc comments directly from the interface body
+  const bodyComments = extractJSDocComments(body);
+
+  // Pattern for method signatures: methodName<T>(params): ReturnType;
+  // Don't include JSDoc in pattern - we'll find it separately
+  const methodPattern = /(\w+)\s*(<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;]+);/g;
+  let match;
+
+  while ((match = methodPattern.exec(body)) !== null) {
+    const [fullMatch, name, generics, params, returnType] = match;
+    if (!name || !returnType) continue;
+
+    // Skip common non-API methods
+    if (['constructor', 'toString', 'valueOf', 'toJSON'].includes(name)) continue;
+
+    // Find JSDoc comment for this method using body-relative positions
+    const jsdoc = findPrecedingJSDoc(body, match.index, bodyComments);
+
+    methods.push({
+      kind: 'function',
+      name,
+      signature: `function ${name}${generics || ''}(${params || ''}): ${returnType.trim()}`,
+      description: jsdoc?.description,
+      params: mergeParamDocs(parseParameters(params || ''), jsdoc?.params),
+      returns: {
+        type: returnType.trim(),
+        description: jsdoc?.returns?.description,
+      },
+      examples: jsdoc?.examples,
+      deprecated: jsdoc?.deprecated ? jsdoc.deprecated : undefined,
+      since: jsdoc?.since,
+      see: jsdoc?.see,
+      sourceFile: filePath,
+    });
+  }
+
+  return methods;
 }
 
 /**
@@ -532,22 +648,36 @@ export function findMainDtsFile(
     if (files.has(normalized)) return normalized;
   }
 
-  // Priority 2: Common entry points
+  // Priority 2: Common entry points (also check __types__/ for merged @types packages)
   const priorities = [
     'index.d.ts',
     'dist/index.d.ts',
     'lib/index.d.ts',
     'types/index.d.ts',
     'src/index.d.ts',
+    // @types packages merged via types-resolver plugin
+    '__types__/index.d.ts',
+    '__types__/dist/index.d.ts',
+    '__types__/lib/index.d.ts',
+    '__types__/types/index.d.ts',
   ];
 
   for (const path of priorities) {
     if (files.has(path)) return path;
   }
 
-  // Priority 3: Any .d.ts file
+  // Priority 3: Any .d.ts file (prefer non-__types__ files)
   for (const path of files.keys()) {
-    if (path.endsWith('.d.ts')) return path;
+    if (path.endsWith('.d.ts') && !path.startsWith('__types__/')) {
+      return path;
+    }
+  }
+
+  // Priority 4: Any .d.ts file from __types__
+  for (const path of files.keys()) {
+    if (path.endsWith('.d.ts') && path.startsWith('__types__/')) {
+      return path;
+    }
   }
 
   return undefined;

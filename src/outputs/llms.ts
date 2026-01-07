@@ -9,22 +9,24 @@ import { countTokens, truncateToTokenLimit } from '../core/tokens.js';
 
 /**
  * Default token limit for llms.txt
+ * Set to Infinity to include ALL content by default (complete documentation)
+ * Users can override with --token-limit flag for size-constrained prompts
  */
-export const DEFAULT_LLMS_TOKEN_LIMIT = 2000;
+export const DEFAULT_LLMS_TOKEN_LIMIT = Infinity;
 
 /**
  * Generate options for llms.txt
  */
 export interface LlmsGenerateOptions {
-  /** Maximum token count */
+  /** Maximum token count (default: Infinity = no limit) */
   tokenLimit?: number;
   /** Include installation instructions */
   includeInstall?: boolean;
   /** Include quick start example */
   includeQuickStart?: boolean;
-  /** Maximum functions to include */
+  /** Maximum functions to include (default: Infinity = all) */
   maxFunctions?: number;
-  /** Maximum classes to include */
+  /** Maximum classes to include (default: Infinity = all) */
   maxClasses?: number;
 }
 
@@ -47,8 +49,8 @@ export function generateLlmsTxt(
     tokenLimit = DEFAULT_LLMS_TOKEN_LIMIT,
     includeInstall = true,
     includeQuickStart = true,
-    maxFunctions = 15,
-    maxClasses = 5,
+    maxFunctions = Infinity,
+    maxClasses = Infinity,
   } = options;
 
   const { package: pkg, api, readme } = context;
@@ -89,11 +91,11 @@ export function generateLlmsTxt(
   // Functions
   if (functions.length > 0) {
     sections.push('### Functions\n');
-    const toInclude = functions.slice(0, maxFunctions);
-    for (const fn of toInclude) {
-      sections.push(formatFunctionBrief(fn));
+    const limit = Math.min(functions.length, maxFunctions);
+    for (let i = 0; i < limit; i++) {
+      sections.push(formatFunctionBrief(functions[i]));
     }
-    if (functions.length > maxFunctions) {
+    if (functions.length > maxFunctions && maxFunctions < Infinity) {
       sections.push(`\n...and ${functions.length - maxFunctions} more functions.`);
     }
     sections.push('');
@@ -102,36 +104,32 @@ export function generateLlmsTxt(
   // Classes
   if (classes.length > 0) {
     sections.push('### Classes\n');
-    const toInclude = classes.slice(0, maxClasses);
-    for (const cls of toInclude) {
-      sections.push(formatClassBrief(cls));
+    const limit = Math.min(classes.length, maxClasses);
+    for (let i = 0; i < limit; i++) {
+      sections.push(formatClassBrief(classes[i]));
     }
-    if (classes.length > maxClasses) {
+    if (classes.length > maxClasses && maxClasses < Infinity) {
       sections.push(`\n...and ${classes.length - maxClasses} more classes.`);
     }
     sections.push('');
   }
 
-  // Types (brief)
+  // Types
   if (interfaces.length > 0 || types.length > 0) {
     sections.push('### Types\n');
-    const allTypes = [...interfaces, ...types].slice(0, 10);
+    const allTypes = [...interfaces, ...types];
     for (const t of allTypes) {
-      const desc = t.description ? ` - ${truncate(t.description, 50)}` : '';
+      const desc = t.description ? ` - ${truncate(t.description, 80)}` : '';
       sections.push(`- \`${t.name}\`${desc}`);
-    }
-    const totalTypes = interfaces.length + types.length;
-    if (totalTypes > 10) {
-      sections.push(`\n...and ${totalTypes - 10} more types.`);
     }
     sections.push('');
   }
 
-  // Constants (brief)
-  if (constants.length > 0 && constants.length <= 10) {
+  // Constants
+  if (constants.length > 0) {
     sections.push('### Constants\n');
-    for (const c of constants.slice(0, 5)) {
-      const desc = c.description ? ` - ${truncate(c.description, 50)}` : '';
+    for (const c of constants) {
+      const desc = c.description ? ` - ${truncate(c.description, 80)}` : '';
       sections.push(`- \`${c.name}\`${desc}`);
     }
     sections.push('');

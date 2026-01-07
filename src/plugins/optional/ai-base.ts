@@ -148,8 +148,8 @@ Generate a summary of this package that explains its purpose and main features:
  * Parse AI response for descriptions
  */
 function parseDescriptionResponse(response: string): string {
-  // Clean up the response
-  return response.trim().replace(/^["']|["']$/g, '').replace(/^Description:\s*/i, '');
+  // Clean up the response - first remove prefix, then quotes
+  return response.trim().replace(/^Description:\s*/i, '').replace(/^["']|["']$/g, '');
 }
 
 /**
