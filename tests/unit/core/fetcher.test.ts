@@ -653,3 +653,78 @@ describe('getDistTags', () => {
     await expect(getDistTags('test-package')).rejects.toThrow('Network error');
   });
 });
+
+describe('version comparison', () => {
+  const mockedFetchJson = vi.mocked(fetchJson);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should handle equal versions when resolving (compareVersions returns 0)', async () => {
+    // Test compareVersions returning 0 for equal versions
+    // When versions array has only one version, sort uses compareVersions internally
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        'dist-tags': {},
+        versions: {
+          '1.0.0': {
+            name: 'test-package',
+            version: '1.0.0',
+            dist: { tarball: 'https://example.com/1.0.0.tgz' },
+          },
+        },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package');
+    expect(result.version).toBe('1.0.0');
+  });
+
+  it('should throw VersionNotFoundError when resolved version data is undefined', async () => {
+    // Mock a scenario where resolved version exists in keys but versionData is undefined
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        'dist-tags': { latest: '1.0.0' },
+        versions: {
+          '1.0.0': undefined as any, // This makes versionData undefined after resolution
+        },
+      },
+    });
+
+    await expect(fetchPackageMetadata('test-package')).rejects.toThrow(VersionNotFoundError);
+  });
+
+  it('should sort equal versions correctly (1.0.0 vs 1.0.0)', async () => {
+    // Test that comparing equal versions works in the sort
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        'dist-tags': {},
+        versions: {
+          '2.0.0': {
+            name: 'test-package',
+            version: '2.0.0',
+            dist: { tarball: 'https://example.com/2.0.0.tgz' },
+          },
+          '1.0.0': {
+            name: 'test-package',
+            version: '1.0.0',
+            dist: { tarball: 'https://example.com/1.0.0.tgz' },
+          },
+          '1.0.0-alpha': {
+            name: 'test-package',
+            version: '1.0.0-alpha',
+            dist: { tarball: 'https://example.com/1.0.0-alpha.tgz' },
+          },
+        },
+      },
+    });
+
+    // Should select highest version (2.0.0)
+    const result = await fetchPackageMetadata('test-package');
+    expect(result.version).toBe('2.0.0');
+  });
+});

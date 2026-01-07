@@ -301,3 +301,49 @@ describe('fetchGzipped', () => {
     await expect(fetchGzipped('https://example.com/file.gz')).rejects.toThrow(DownloadError);
   });
 });
+
+describe('timeout mechanism', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should abort request when signal is aborted', async () => {
+    // Test that when the AbortController aborts, the request properly throws
+    // This simulates the behavior when setTimeout fires
+    mockFetch.mockImplementation((_url: string, options: { signal?: AbortSignal }) => {
+      return new Promise((_resolve, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            const abortError = new Error('The operation was aborted');
+            abortError.name = 'AbortError';
+            reject(abortError);
+          });
+        }
+      });
+    });
+
+    // Use real timers with a very short timeout
+    const fetchPromise = fetchJson('https://example.com/api', { timeout: 10 });
+
+    // The request should throw TimeoutError
+    await expect(fetchPromise).rejects.toThrow(TimeoutError);
+  });
+
+  it('should abort binary request when signal is aborted', async () => {
+    mockFetch.mockImplementation((_url: string, options: { signal?: AbortSignal }) => {
+      return new Promise((_resolve, reject) => {
+        if (options?.signal) {
+          options.signal.addEventListener('abort', () => {
+            const abortError = new Error('The operation was aborted');
+            abortError.name = 'AbortError';
+            reject(abortError);
+          });
+        }
+      });
+    });
+
+    const fetchPromise = fetchBinary('https://example.com/file', { timeout: 10 });
+
+    await expect(fetchPromise).rejects.toThrow(TimeoutError);
+  });
+});

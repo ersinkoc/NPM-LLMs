@@ -317,6 +317,105 @@ npm install my-package
     const result = extractInstallCommand(content);
     expect(result).toBeUndefined();
   });
+
+  it('should extract npm install from multi-line code block', () => {
+    const content = `
+# Installation
+
+\`\`\`bash
+# First, create a project
+cd my-project
+npm install my-package
+echo "Done!"
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('npm install my-package');
+  });
+
+  it('should extract yarn add from multi-line code block', () => {
+    const content = `
+\`\`\`sh
+# Install with yarn
+yarn add my-package
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('yarn add my-package');
+  });
+
+  it('should extract pnpm add from multi-line code block', () => {
+    const content = `
+\`\`\`shell
+# Using pnpm
+pnpm add my-package
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('pnpm add my-package');
+  });
+
+  it('should find install command nested in code block with other commands', () => {
+    const content = `
+\`\`\`bash
+mkdir project
+cd project
+npm init -y
+npm install my-package
+npm start
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('npm install my-package');
+  });
+
+  it('should check all patterns against each line in code block', () => {
+    const content = `
+\`\`\`
+# Comment line
+another line
+npm i my-pkg
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('npm i my-pkg');
+  });
+
+  it('should search through code block lines to find install command', () => {
+    // This test ensures we go through the code block line-by-line loop
+    // The content has no plain-text install command, only inside the code block
+    const content = `
+## How to use
+
+See the installation guide below:
+
+\`\`\`shell
+# Setup your project first
+mkdir my-app && cd my-app
+npm install my-awesome-lib
+echo "Done"
+\`\`\`
+
+More documentation follows.
+`;
+    const result = extractInstallCommand(content);
+    // The function extracts the install command from within the code block
+    expect(result).toMatch(/npm install/);
+  });
+
+  it('should iterate through all patterns for each code block line', () => {
+    // Test that pnpm add is found after iterating through npm and yarn patterns
+    const content = `
+No install commands in plain text here.
+
+\`\`\`bash
+# Using pnpm for faster installs
+pnpm add my-package
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toMatch(/pnpm add/);
+  });
 });
 
 describe('cleanMarkdown', () => {

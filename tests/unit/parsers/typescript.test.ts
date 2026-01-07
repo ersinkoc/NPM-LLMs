@@ -638,3 +638,76 @@ describe('findTypeScriptFiles', () => {
     expect(result.length).toBe(2);
   });
 });
+
+describe('additional edge cases', () => {
+  it('should infer unknown type for variable reference defaults', () => {
+    const content = `
+export function test(value = someVariable): void {
+}
+`;
+    const result = parseTypeScript(content);
+
+    // Variable reference doesn't match any known pattern, so it should be 'unknown'
+    expect(result.exports[0]!.params![0]!.type).toBe('unknown');
+  });
+
+  it('should handle simple function with body', () => {
+    const content = `
+export function calculateSum(a: number, b: number): number {
+  return a + b;
+}
+`;
+    const result = parseTypeScript(content);
+
+    expect(result.exports).toHaveLength(1);
+    expect(result.exports[0]!.name).toBe('calculateSum');
+    expect(result.exports[0]!.kind).toBe('function');
+  });
+
+  it('should parse class with method body', () => {
+    const content = `
+export class Calculator {
+  add(a: number, b: number): number {
+    const sum = a + b;
+    if (sum > 100) {
+      return 100;
+    }
+    return sum;
+  }
+}
+`;
+    const result = parseTypeScript(content);
+
+    expect(result.exports).toHaveLength(1);
+    expect(result.exports[0]!.kind).toBe('class');
+    expect(result.exports[0]!.name).toBe('Calculator');
+  });
+
+  it('should handle nested function bodies', () => {
+    const content = `
+export function outer(x: number): number {
+  function inner(y: number): number {
+    return y * 2;
+  }
+  return inner(x) + 1;
+}
+`;
+    const result = parseTypeScript(content);
+
+    expect(result.exports).toHaveLength(1);
+    expect(result.exports[0]!.name).toBe('outer');
+  });
+
+  it('should handle function with array return type', () => {
+    const content = `
+export function getItems(): string[] {
+  return ['a', 'b', 'c'];
+}
+`;
+    const result = parseTypeScript(content);
+
+    expect(result.exports).toHaveLength(1);
+    expect(result.exports[0]!.name).toBe('getItems');
+    expect(result.exports[0]!.signature).toContain('string[]');
+  });
+});
