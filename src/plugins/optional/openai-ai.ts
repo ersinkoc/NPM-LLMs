@@ -1,6 +1,6 @@
 /**
  * OpenAI Plugin
- * Integrates OpenAI's GPT models for documentation enrichment
+ * Integrates OpenAI and OpenAI-compatible APIs for documentation enrichment
  * @module plugins/optional/openai-ai
  */
 
@@ -9,30 +9,104 @@ import { AIError } from '../../errors.js';
 import { createAIEnrichmentPlugin, type AIEnrichmentOptions } from './ai-base.js';
 
 /**
+ * OpenAI-compatible provider presets
+ */
+export const OPENAI_COMPATIBLE_PRESETS = {
+  openai: {
+    name: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    envKey: 'OPENAI_API_KEY',
+    defaultModel: 'gpt-4.1-nano',
+  },
+  xai: {
+    name: 'xai',
+    baseUrl: 'https://api.x.ai/v1',
+    envKey: 'XAI_API_KEY',
+    defaultModel: 'grok-3-mini-fast',
+  },
+  zai: {
+    name: 'zai',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    envKey: 'ZAI_API_KEY',
+    defaultModel: 'glm-4.7',
+  },
+  together: {
+    name: 'together',
+    baseUrl: 'https://api.together.xyz/v1',
+    envKey: 'TOGETHER_API_KEY',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+  },
+  perplexity: {
+    name: 'perplexity',
+    baseUrl: 'https://api.perplexity.ai',
+    envKey: 'PERPLEXITY_API_KEY',
+    defaultModel: 'sonar-pro',
+  },
+  openrouter: {
+    name: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    envKey: 'OPENROUTER_API_KEY',
+    defaultModel: 'anthropic/claude-3.5-sonnet',
+  },
+  deepseek: {
+    name: 'deepseek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    envKey: 'DEEPSEEK_API_KEY',
+    defaultModel: 'deepseek-chat',
+  },
+  mistral: {
+    name: 'mistral',
+    baseUrl: 'https://api.mistral.ai/v1',
+    envKey: 'MISTRAL_API_KEY',
+    defaultModel: 'mistral-small-latest',
+  },
+} as const;
+
+export type OpenAICompatiblePreset = keyof typeof OPENAI_COMPATIBLE_PRESETS;
+
+/**
  * OpenAI API configuration
  */
 export interface OpenAIConfig {
   /** API key (or set OPENAI_API_KEY env var) */
   apiKey?: string;
   /** Model to use */
-  model?: string;
-  /** API base URL */
+  model?:
+    | 'gpt-4.1'
+    | 'gpt-4.1-mini'
+    | 'gpt-4.1-nano'
+    | 'gpt-4o'
+    | 'gpt-4o-mini'
+    | 'o4-mini'
+    | 'o3'
+    | 'o3-mini'
+    | 'o3-pro'
+    | 'o1'
+    | 'o1-pro'
+    | string;
+  /** API base URL (with /v1 suffix for chat/completions endpoint) */
   baseUrl?: string;
   /** Request timeout in ms */
   timeout?: number;
-  /** Organization ID */
+  /** Organization ID (OpenAI only) */
   organization?: string;
+  /** Provider preset for OpenAI-compatible APIs */
+  preset?: OpenAICompatiblePreset;
 }
 
 /**
  * Default OpenAI configuration
  */
-const DEFAULT_CONFIG: Required<Omit<OpenAIConfig, 'organization'>> & { organization?: string } = {
+const DEFAULT_CONFIG: Required<Omit<OpenAIConfig, 'organization' | 'preset'>> & {
+  organization?: string;
+  preset?: OpenAICompatiblePreset;
+} = {
   apiKey: '',
-  model: 'gpt-4o-mini',
-  baseUrl: 'https://api.openai.com',
+  model: 'gpt-4.1-nano',
+  baseUrl: 'https://api.openai.com/v1',
   timeout: 30000,
   organization: undefined,
+  preset: undefined,
 };
 
 /**
@@ -82,14 +156,23 @@ interface OpenAIResponse {
  * @returns AI provider instance
  */
 export function createOpenAIProvider(config: OpenAIConfig = {}): AIProvider {
+  // Apply preset if specified
+  const preset = config.preset ? OPENAI_COMPATIBLE_PRESETS[config.preset] : null;
+
   const cfg = {
     ...DEFAULT_CONFIG,
+    ...(preset && {
+      baseUrl: preset.baseUrl,
+      model: preset.defaultModel,
+    }),
     ...config,
-    apiKey: config.apiKey || process.env['OPENAI_API_KEY'] || '',
+    apiKey: config.apiKey || process.env[preset?.envKey ?? 'OPENAI_API_KEY'] || '',
   };
 
+  const providerName = preset?.name ?? 'openai';
+
   return {
-    name: 'openai',
+    name: providerName,
 
     isAvailable(): boolean {
       return !!cfg.apiKey;
@@ -97,7 +180,7 @@ export function createOpenAIProvider(config: OpenAIConfig = {}): AIProvider {
 
     async complete(prompt: string, options?: CompletionOptions): Promise<string> {
       if (!cfg.apiKey) {
-        throw new AIError('OPENAI_API_KEY not set', 'openai');
+        throw new AIError(`${preset?.envKey ?? 'OPENAI_API_KEY'} not set`, providerName);
       }
 
       const messages: OpenAIMessage[] = [];
@@ -128,7 +211,7 @@ export function createOpenAIProvider(config: OpenAIConfig = {}): AIProvider {
       const timeoutId = setTimeout(() => controller.abort(), cfg.timeout);
 
       try {
-        const response = await fetch(`${cfg.baseUrl}/v1/chat/completions`, {
+        const response = await fetch(`${cfg.baseUrl}/chat/completions`, {
           method: 'POST',
           headers,
           body: JSON.stringify(requestBody),
@@ -140,8 +223,8 @@ export function createOpenAIProvider(config: OpenAIConfig = {}): AIProvider {
         if (!response.ok) {
           const errorText = await response.text();
           throw new AIError(
-            `OpenAI API error: ${response.status} ${response.statusText} - ${errorText}`,
-            'openai'
+            `${providerName} API error: ${response.status} ${response.statusText} - ${errorText}`,
+            providerName
           );
         }
 
@@ -149,7 +232,7 @@ export function createOpenAIProvider(config: OpenAIConfig = {}): AIProvider {
 
         const choice = data.choices[0];
         if (!choice || !choice.message.content) {
-          throw new AIError('No content in OpenAI response', 'openai');
+          throw new AIError(`No content in ${providerName} response`, providerName);
         }
 
         return choice.message.content;
@@ -161,12 +244,12 @@ export function createOpenAIProvider(config: OpenAIConfig = {}): AIProvider {
         }
 
         if (error instanceof Error && error.name === 'AbortError') {
-          throw new AIError('OpenAI API request timed out', 'openai');
+          throw new AIError(`${providerName} API request timed out`, providerName);
         }
 
         throw new AIError(
-          `OpenAI API request failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          'openai'
+          `${providerName} API request failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          providerName
         );
       }
     },
@@ -185,6 +268,62 @@ export function createOpenAIPlugin(
 ) {
   const provider = createOpenAIProvider(config);
   return createAIEnrichmentPlugin(provider, enrichmentOptions);
+}
+
+/**
+ * Create x.ai (Grok) provider
+ * @param config - Configuration (apiKey, model, etc.)
+ */
+export function createXAIProvider(config: Omit<OpenAIConfig, 'preset'> = {}): AIProvider {
+  return createOpenAIProvider({ ...config, preset: 'xai' });
+}
+
+/**
+ * Create z.ai (GLM) provider
+ * @param config - Configuration (apiKey, model, etc.)
+ */
+export function createZAIProvider(config: Omit<OpenAIConfig, 'preset'> = {}): AIProvider {
+  return createOpenAIProvider({ ...config, preset: 'zai' });
+}
+
+/**
+ * Create Together AI provider
+ * @param config - Configuration (apiKey, model, etc.)
+ */
+export function createTogetherProvider(config: Omit<OpenAIConfig, 'preset'> = {}): AIProvider {
+  return createOpenAIProvider({ ...config, preset: 'together' });
+}
+
+/**
+ * Create Perplexity provider
+ * @param config - Configuration (apiKey, model, etc.)
+ */
+export function createPerplexityProvider(config: Omit<OpenAIConfig, 'preset'> = {}): AIProvider {
+  return createOpenAIProvider({ ...config, preset: 'perplexity' });
+}
+
+/**
+ * Create OpenRouter provider
+ * @param config - Configuration (apiKey, model, etc.)
+ */
+export function createOpenRouterProvider(config: Omit<OpenAIConfig, 'preset'> = {}): AIProvider {
+  return createOpenAIProvider({ ...config, preset: 'openrouter' });
+}
+
+/**
+ * Create DeepSeek provider
+ * @param config - Configuration (apiKey, model, etc.)
+ */
+export function createDeepSeekProvider(config: Omit<OpenAIConfig, 'preset'> = {}): AIProvider {
+  return createOpenAIProvider({ ...config, preset: 'deepseek' });
+}
+
+/**
+ * Create Mistral provider
+ * @param config - Configuration (apiKey, model, etc.)
+ */
+export function createMistralProvider(config: Omit<OpenAIConfig, 'preset'> = {}): AIProvider {
+  return createOpenAIProvider({ ...config, preset: 'mistral' });
 }
 
 export { createAIEnrichmentPlugin, type AIEnrichmentOptions };

@@ -85,7 +85,7 @@ describe('createGeminiProvider', () => {
 
       expect(result).toBe('Generated response');
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'),
+        expect.stringContaining('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent'),
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({

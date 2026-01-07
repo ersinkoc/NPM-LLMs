@@ -59,7 +59,7 @@ describe('createClaudeProvider', () => {
           type: 'message',
           role: 'assistant',
           content: [{ type: 'text', text: 'Generated response' }],
-          model: 'claude-3-haiku-20240307',
+          model: 'claude-haiku-4-5-20251001',
           stop_reason: 'end_turn',
           usage: { input_tokens: 10, output_tokens: 20 },
         }),
@@ -88,7 +88,7 @@ describe('createClaudeProvider', () => {
       );
 
       const requestBody = JSON.parse((fetch as any).mock.calls[0][1].body);
-      expect(requestBody.model).toBe('claude-3-haiku-20240307');
+      expect(requestBody.model).toBe('claude-haiku-4-5-20251001');
       expect(requestBody.max_tokens).toBe(500);
       expect(requestBody.temperature).toBe(0.5);
       expect(requestBody.system).toBe('You are helpful');

@@ -15,7 +15,14 @@ export interface ClaudeConfig {
   /** API key (or set ANTHROPIC_API_KEY env var) */
   apiKey?: string;
   /** Model to use */
-  model?: string;
+  model?:
+    | 'claude-opus-4-5-20251101'
+    | 'claude-sonnet-4-5-20250929'
+    | 'claude-haiku-4-5-20251001'
+    | 'claude-opus-4-5'
+    | 'claude-sonnet-4-5'
+    | 'claude-haiku-4-5'
+    | string;
   /** API base URL */
   baseUrl?: string;
   /** Request timeout in ms */
@@ -27,7 +34,7 @@ export interface ClaudeConfig {
  */
 const DEFAULT_CONFIG: Required<ClaudeConfig> = {
   apiKey: '',
-  model: 'claude-3-haiku-20240307',
+  model: 'claude-haiku-4-5-20251001',
   baseUrl: 'https://api.anthropic.com',
   timeout: 30000,
 };

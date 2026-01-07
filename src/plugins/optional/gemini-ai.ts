@@ -14,7 +14,19 @@ export interface GeminiConfig {
   /** Gemini API key (defaults to GOOGLE_API_KEY or GEMINI_API_KEY env var) */
   apiKey?: string;
   /** Model to use */
-  model?: 'gemini-pro' | 'gemini-pro-vision' | 'gemini-1.5-pro' | 'gemini-1.5-flash' | string;
+  model?:
+    | 'gemini-3-pro-preview'
+    | 'gemini-3-pro-image-preview'
+    | 'gemini-3-flash-preview'
+    | 'gemini-2.5-flash-image'
+    | 'gemini-2.5-pro'
+    | 'gemini-2.5-flash'
+    | 'gemini-2.5-flash-lite'
+    | 'gemini-2.0-flash'
+    | 'gemini-2.0-flash-lite'
+    | 'gemini-flash-latest'
+    | 'gemini-flash-lite-latest'
+    | string;
   /** API base URL */
   baseUrl?: string;
   /** Request timeout in ms */
@@ -26,7 +38,7 @@ export interface GeminiConfig {
 }
 
 const DEFAULT_CONFIG: Required<Omit<GeminiConfig, 'apiKey'>> = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-3-flash-preview',
   baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   timeout: 60000,
   maxTokens: 1024,
