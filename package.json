@@ -1,6 +1,6 @@
 {
   "name": "@oxog/npm-llms",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Extract LLM-optimized documentation (llms.txt, llms-full.txt) from any NPM package with AI enrichment",
   "type": "module",
   "main": "./dist/index.cjs",
