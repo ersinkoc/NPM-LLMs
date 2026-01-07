@@ -168,253 +168,201 @@ interface FormatOptions {
 }
 
 /**
- * Format a function entry
+ * Format a function entry - compact format
  */
 function formatFunction(fn: APIEntry, options: FormatOptions): string {
   const lines: string[] = [];
 
-  // Name and signature
-  lines.push(`#### \`${fn.name}\``);
+  // Compact signature line
+  const params = fn.params?.map((p) => {
+    const opt = p.optional ? '?' : '';
+    return `${p.name}${opt}: ${compactType(p.type || 'unknown')}`;
+  }).join(', ') || '';
+  const returnType = fn.returns?.type ? compactType(fn.returns.type) : 'void';
+
+  lines.push(`**${fn.name}**(${params}): ${returnType}`);
 
   if (options.includeDeprecations && fn.deprecated) {
-    lines.push(`\n> ⚠️ **Deprecated:** ${typeof fn.deprecated === 'string' ? fn.deprecated : 'This function is deprecated.'}`);
+    lines.push(`  ⚠️ Deprecated${typeof fn.deprecated === 'string' ? `: ${fn.deprecated}` : ''}`);
   }
 
   if (fn.description) {
-    lines.push(`\n${fn.description}`);
+    lines.push(`  ${truncateDesc(fn.description, 120)}`);
   }
 
-  // Signature
-  lines.push('\n**Signature:**');
-  lines.push('```typescript');
-  lines.push(fn.signature);
-  lines.push('```');
-
-  // Parameters
-  if (fn.params && fn.params.length > 0 && options.includeParamDescriptions) {
-    lines.push('\n**Parameters:**\n');
-    for (const param of fn.params) {
-      const optional = param.optional ? ' (optional)' : '';
-      const defaultVal = param.defaultValue ? ` = \`${param.defaultValue}\`` : '';
-      lines.push(`- \`${param.name}: ${param.type || 'unknown'}\`${optional}${defaultVal}`);
-      if (param.description) {
-        lines.push(`  - ${param.description}`);
-      }
-    }
-  }
-
-  // Returns
-  if (fn.returns) {
-    lines.push('\n**Returns:**');
-    lines.push(`- \`${fn.returns.type}\`${fn.returns.description ? ` - ${fn.returns.description}` : ''}`);
-  }
-
-  // Examples
+  // Only include first example if any
   if (options.includeExamples && fn.examples && fn.examples.length > 0) {
-    lines.push('\n**Examples:**');
-    for (const example of fn.examples) {
-      if (example.includes('```')) {
-        lines.push(example);
-      } else {
-        lines.push('```typescript');
-        lines.push(example);
-        lines.push('```');
-      }
+    const example = fn.examples[0];
+    const cleanExample = example.replace(/```\w*\n?/g, '').trim();
+    if (cleanExample.length < 150) {
+      lines.push(`  Example: \`${cleanExample.replace(/\n/g, ' ')}\``);
     }
-  }
-
-  // Source location
-  if (options.includeSourceLocations && fn.sourceFile) {
-    lines.push(`\n*Source: ${fn.sourceFile}${fn.line ? `:${fn.line}` : ''}*`);
   }
 
   return lines.join('\n');
 }
 
 /**
- * Format a class entry
+ * Format a class entry - compact format
  */
 function formatClass(cls: APIEntry, options: FormatOptions): string {
   const lines: string[] = [];
 
-  // Name
-  lines.push(`#### \`${cls.name}\``);
+  // Class header
+  let header = `**class ${cls.name}**`;
+  if (cls.extends && cls.extends.length > 0) {
+    header += ` extends ${cls.extends.join(', ')}`;
+  }
+  lines.push(header);
 
   if (options.includeDeprecations && cls.deprecated) {
-    lines.push(`\n> ⚠️ **Deprecated:** ${typeof cls.deprecated === 'string' ? cls.deprecated : 'This class is deprecated.'}`);
+    lines.push(`  ⚠️ Deprecated`);
   }
 
   if (cls.description) {
-    lines.push(`\n${cls.description}`);
+    lines.push(`  ${truncateDesc(cls.description, 100)}`);
   }
 
-  // Signature
-  lines.push('\n**Signature:**');
-  lines.push('```typescript');
-  let sig = cls.signature;
-  if (cls.extends && cls.extends.length > 0) {
-    sig += ` extends ${cls.extends.join(', ')}`;
-  }
-  if (cls.implements && cls.implements.length > 0) {
-    sig += ` implements ${cls.implements.join(', ')}`;
-  }
-  lines.push(sig);
-  lines.push('```');
-
-  // Properties
+  // Properties - compact list
   if (cls.properties && cls.properties.length > 0) {
-    lines.push('\n**Properties:**\n');
-    for (const prop of cls.properties) {
-      lines.push(`- \`${prop.name}\`: \`${prop.signature.split(':').slice(1).join(':').trim() || 'unknown'}\``);
-      if (prop.description) {
-        lines.push(`  - ${prop.description}`);
-      }
-    }
+    const props = cls.properties.map((p) => {
+      const type = p.signature.split(':').slice(1).join(':').trim() || 'unknown';
+      return `${p.name}: ${compactType(type)}`;
+    });
+    lines.push(`  Props: ${props.join(', ')}`);
   }
 
-  // Methods
+  // Methods - compact list
   if (cls.methods && cls.methods.length > 0) {
-    lines.push('\n**Methods:**\n');
-    for (const method of cls.methods) {
-      const params = method.params?.map((p) => `${p.name}: ${p.type || 'unknown'}`).join(', ') || '';
-      const returnType = method.returns?.type || 'void';
-      lines.push(`- \`${method.name}(${params}): ${returnType}\``);
-      if (method.description) {
-        lines.push(`  - ${method.description}`);
-      }
-    }
-  }
-
-  // Examples
-  if (options.includeExamples && cls.examples && cls.examples.length > 0) {
-    lines.push('\n**Examples:**');
-    for (const example of cls.examples) {
-      if (example.includes('```')) {
-        lines.push(example);
-      } else {
-        lines.push('```typescript');
-        lines.push(example);
-        lines.push('```');
-      }
-    }
+    const methods = cls.methods.map((m) => {
+      const ret = m.returns?.type ? compactType(m.returns.type) : 'void';
+      return `${m.name}() → ${ret}`;
+    });
+    lines.push(`  Methods: ${methods.join(', ')}`);
   }
 
   return lines.join('\n');
 }
 
 /**
- * Format an interface entry
+ * Format an interface entry - compact format
  */
 function formatInterface(iface: APIEntry, options: FormatOptions): string {
   const lines: string[] = [];
 
-  lines.push(`#### \`${iface.name}\``);
-
-  if (options.includeDeprecations && iface.deprecated) {
-    lines.push(`\n> ⚠️ **Deprecated**`);
+  let header = `**interface ${iface.name}**`;
+  if (iface.extends && iface.extends.length > 0) {
+    header += ` extends ${iface.extends.join(', ')}`;
   }
+  lines.push(header);
 
   if (iface.description) {
-    lines.push(`\n${iface.description}`);
+    lines.push(`  ${truncateDesc(iface.description, 100)}`);
   }
 
-  // Signature with full definition
-  lines.push('\n```typescript');
-  let sig = iface.signature;
-  if (iface.extends && iface.extends.length > 0) {
-    sig += ` extends ${iface.extends.join(', ')}`;
-  }
-  lines.push(sig + ' {');
-
-  // Properties
+  // Properties as compact list
   if (iface.properties && iface.properties.length > 0) {
-    for (const prop of iface.properties) {
-      lines.push(`  ${prop.signature};`);
+    const props = iface.properties.slice(0, 8).map((p) => {
+      const sig = p.signature.replace(/;$/, '').trim();
+      return sig.length < 40 ? sig : `${p.name}: ...`;
+    });
+    let propLine = `  { ${props.join('; ')}`;
+    if (iface.properties.length > 8) {
+      propLine += `; +${iface.properties.length - 8} more`;
     }
+    propLine += ' }';
+    lines.push(propLine);
   }
-
-  // Methods
-  if (iface.methods && iface.methods.length > 0) {
-    for (const method of iface.methods) {
-      lines.push(`  ${method.signature};`);
-    }
-  }
-
-  lines.push('}');
-  lines.push('```');
 
   return lines.join('\n');
 }
 
 /**
- * Format a type entry
+ * Format a type entry - compact format
  */
 function formatType(type: APIEntry, options: FormatOptions): string {
   const lines: string[] = [];
 
-  lines.push(`#### \`${type.name}\``);
+  // Compact type definition
+  const compactSig = type.signature
+    .replace(/^type\s+\w+\s*=\s*/, '')
+    .replace(/\s*\n\s*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  lines.push(`**type ${type.name}** = ${compactSig.length > 100 ? compactSig.slice(0, 97) + '...' : compactSig}`);
 
   if (options.includeDeprecations && type.deprecated) {
-    lines.push(`\n> ⚠️ **Deprecated**`);
+    lines.push(`  ⚠️ Deprecated`);
   }
 
   if (type.description) {
-    lines.push(`\n${type.description}`);
+    lines.push(`  ${truncateDesc(type.description, 100)}`);
   }
-
-  lines.push('\n```typescript');
-  lines.push(type.signature);
-  lines.push('```');
 
   return lines.join('\n');
 }
 
 /**
- * Format an enum entry
+ * Format an enum entry - compact format
  */
 function formatEnum(enumEntry: APIEntry): string {
   const lines: string[] = [];
 
-  lines.push(`#### \`${enumEntry.name}\``);
+  // Compact: enum NAME { A, B, C } or enum NAME { A=1, B=2 }
+  const members = enumEntry.members?.map((m) => {
+    if (m.value !== undefined) {
+      return `${m.name}=${typeof m.value === 'string' ? `"${m.value}"` : m.value}`;
+    }
+    return m.name;
+  }) || [];
+
+  const memberStr = members.join(', ');
+  const compactMembers = memberStr.length > 80 ? memberStr.slice(0, 77) + '...' : memberStr;
+
+  lines.push(`**enum ${enumEntry.name}** { ${compactMembers} }`);
 
   if (enumEntry.description) {
-    lines.push(`\n${enumEntry.description}`);
+    lines.push(`  ${truncateDesc(enumEntry.description, 100)}`);
   }
-
-  lines.push('\n```typescript');
-  lines.push(`enum ${enumEntry.name} {`);
-
-  if (enumEntry.members) {
-    for (const member of enumEntry.members) {
-      if (member.value !== undefined) {
-        lines.push(`  ${member.name} = ${JSON.stringify(member.value)},`);
-      } else {
-        lines.push(`  ${member.name},`);
-      }
-    }
-  }
-
-  lines.push('}');
-  lines.push('```');
 
   return lines.join('\n');
 }
 
 /**
- * Format a constant entry
+ * Format a constant entry - compact format
  */
 function formatConstant(constant: APIEntry): string {
   const lines: string[] = [];
 
-  lines.push(`#### \`${constant.name}\``);
+  // Compact: const NAME: TYPE = VALUE
+  lines.push(`**${constant.name}**: ${compactType(constant.signature.replace(/^(const|let|var)\s+\w+\s*[=:]\s*/, ''))}`);
 
   if (constant.description) {
-    lines.push(`\n${constant.description}`);
+    lines.push(`  ${truncateDesc(constant.description, 100)}`);
   }
 
-  lines.push('\n```typescript');
-  lines.push(constant.signature);
-  lines.push('```');
-
   return lines.join('\n');
+}
+
+/**
+ * Compact a type string by removing newlines and extra whitespace
+ */
+function compactType(type: string): string {
+  const compact = type
+    .replace(/\s*\n\s*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s*([{}<>,;:|&])\s*/g, '$1')
+    .trim();
+  if (compact.length <= 60) return compact;
+  return compact.slice(0, 57) + '...';
+}
+
+/**
+ * Truncate description to max length
+ */
+function truncateDesc(desc: string, maxLen: number): string {
+  const oneLine = desc.replace(/\s*\n\s*/g, ' ').trim();
+  if (oneLine.length <= maxLen) return oneLine;
+  return oneLine.slice(0, maxLen - 3) + '...';
 }

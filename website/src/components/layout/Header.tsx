@@ -30,7 +30,7 @@ export function Header() {
                 className={cn(
                   'text-sm font-medium transition-colors hover:text-[var(--color-foreground)] hover:no-underline',
                   location.pathname === item.href ||
-                  (item.href !== '/' && location.pathname.startsWith(item.href))
+                  location.pathname.startsWith(item.href)
                     ? 'text-[var(--color-foreground)]'
                     : 'text-[var(--color-muted-foreground)]'
                 )}
@@ -95,7 +95,7 @@ export function Header() {
                 className={cn(
                   'px-3 py-2 rounded-md text-sm font-medium transition-colors hover:no-underline',
                   location.pathname === item.href ||
-                  (item.href !== '/' && location.pathname.startsWith(item.href))
+                  location.pathname.startsWith(item.href)
                     ? 'bg-[var(--color-muted)] text-[var(--color-foreground)]'
                     : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]'
                 )}
