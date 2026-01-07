@@ -1,151 +1,227 @@
-import { CodeBlock } from '../components/CodeBlock';
+import { CodeBlock } from '@/components/code/CodeBlock';
 
-const basicExample = `import { extract } from '@oxog/npm-llms';
+const basicExample = `import { extractPackageInfo, formatAsLlmsTxt } from '@oxog/npm-llms';
 
-// Simplest usage
-const result = await extract('lodash');
-console.log(result.outputs['llms']);`;
+async function main() {
+  // Extract package documentation
+  const info = await extractPackageInfo('lodash');
 
-const withOptionsExample = `import { createExtractor } from '@oxog/npm-llms';
+  // Generate llms.txt format
+  const output = formatAsLlmsTxt(info);
 
-const extractor = createExtractor({
-  cache: { enabled: true, ttl: 7 * 24 * 60 * 60 * 1000 },
-  verbose: true,
-});
+  console.log(output);
+}
 
-const result = await extractor.extract('zod@3.22.0', {
-  formats: ['llms', 'llms-full', 'markdown', 'json'],
-  llmsTokenLimit: 2000,
-  prioritize: ['functions', 'examples'],
-});
+main();`;
 
-// Save outputs
-for (const [format, content] of Object.entries(result.outputs)) {
-  console.log(\`=== \${format} ===\`);
-  console.log(content.slice(0, 500));
-}`;
+const multipleFormatsExample = `import {
+  extractPackageInfo,
+  formatAsLlmsTxt,
+  formatAsLlmsFullTxt,
+  formatAsMarkdown,
+  formatAsJson,
+} from '@oxog/npm-llms';
+import { writeFile } from 'fs/promises';
 
-const aiEnrichmentExample = `import { createExtractor } from '@oxog/npm-llms';
-import { createClaudePlugin } from '@oxog/npm-llms/plugins';
+async function generateDocs(packageName: string) {
+  const info = await extractPackageInfo(packageName);
 
-const extractor = createExtractor();
+  // Generate all formats
+  await Promise.all([
+    writeFile(\`\${packageName}.llms.txt\`, formatAsLlmsTxt(info)),
+    writeFile(\`\${packageName}.llms-full.txt\`, formatAsLlmsFullTxt(info)),
+    writeFile(\`\${packageName}.md\`, formatAsMarkdown(info)),
+    writeFile(\`\${packageName}.json\`, formatAsJson(info)),
+  ]);
 
-// Add Claude AI enrichment
-extractor.use(createClaudePlugin({
-  model: 'claude-3-haiku-20240307',
-  maxTokens: 512,
-}));
+  console.log(\`Generated documentation for \${packageName}\`);
+}
 
-const result = await extractor.extract('ms', {
-  formats: ['llms'],
-  enrichWithAI: true,
-  aiTasks: ['descriptions', 'examples'],
-});`;
+generateDocs('axios');`;
 
-const ollamaExample = `import { createExtractor } from '@oxog/npm-llms';
-import { createOllamaPlugin, checkOllamaAvailable } from '@oxog/npm-llms/plugins';
+const aiEnrichmentExample = `import { extractPackageInfo, formatAsLlmsTxt } from '@oxog/npm-llms';
+import { createClaudeProvider } from '@oxog/npm-llms/plugins/claude-ai';
 
-// Check if Ollama is running
-if (await checkOllamaAvailable()) {
-  const extractor = createExtractor();
-
-  extractor.use(createOllamaPlugin({
-    model: 'llama3.2',
-    baseUrl: 'http://localhost:11434',
-  }));
-
-  const result = await extractor.extract('chalk', {
-    enrichWithAI: true,
+async function generateEnrichedDocs() {
+  // Create AI provider
+  const claude = createClaudeProvider({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    model: 'claude-haiku-4-5',
   });
-}`;
 
-const customPluginExample = `import { createExtractor, definePlugin } from '@oxog/npm-llms';
+  // Extract with AI enrichment
+  const info = await extractPackageInfo('express', {
+    aiProvider: claude,
+  });
 
-const myPlugin = definePlugin({
-  name: 'my-custom-plugin',
+  // AI will add:
+  // - Improved function descriptions
+  // - Usage examples
+  // - Best practices
+  const output = formatAsLlmsTxt(info);
+
+  console.log(output);
+}
+
+generateEnrichedDocs();`;
+
+const batchProcessingExample = `import { extractPackageInfo, formatAsLlmsTxt } from '@oxog/npm-llms';
+import { writeFile, mkdir } from 'fs/promises';
+
+const packages = [
+  'lodash',
+  'express',
+  'axios',
+  'react',
+  'zod',
+  'prisma',
+];
+
+async function batchProcess() {
+  await mkdir('./docs', { recursive: true });
+
+  const results = await Promise.allSettled(
+    packages.map(async (pkg) => {
+      console.log(\`Processing \${pkg}...\`);
+      const info = await extractPackageInfo(pkg);
+      const output = formatAsLlmsTxt(info);
+      await writeFile(\`./docs/\${pkg}.llms.txt\`, output);
+      return pkg;
+    })
+  );
+
+  const successful = results.filter(r => r.status === 'fulfilled').length;
+  console.log(\`\\nProcessed \${successful}/\${packages.length} packages\`);
+}
+
+batchProcess();`;
+
+const customPluginExample = `import { extractPackageInfo, definePlugin } from '@oxog/npm-llms';
+
+// Create a plugin that adds custom metadata
+const metadataPlugin = definePlugin({
+  name: 'metadata-plugin',
   version: '1.0.0',
-  category: 'output',
 
-  install(kernel) {
-    kernel.on('output:generate', async (ctx) => {
-      // Generate custom output
-      const yaml = ctx.api.map(entry =>
-        \`- name: \${entry.name}\\n  kind: \${entry.kind}\`
-      ).join('\\n');
-
-      ctx.outputs.set('yaml', yaml);
-    });
+  hooks: {
+    'extract:after': async (context, result) => {
+      return {
+        ...result,
+        metadata: {
+          extractedAt: new Date().toISOString(),
+          source: 'npm-llms',
+          version: '1.0.0',
+        },
+      };
+    },
   },
 });
 
-const extractor = createExtractor();
-extractor.use(myPlugin);`;
-
-const batchExample = `import { createExtractor } from '@oxog/npm-llms';
-import { writeFile, mkdir } from 'node:fs/promises';
-
-const packages = ['lodash', 'zod', 'express', 'react'];
-const extractor = createExtractor({ cache: { enabled: true } });
-
-for (const pkg of packages) {
-  console.log(\`Extracting \${pkg}...\`);
-
-  const result = await extractor.extract(pkg, {
-    formats: ['llms'],
-    llmsTokenLimit: 1500,
+async function extractWithMetadata() {
+  const info = await extractPackageInfo('lodash', {
+    plugins: [metadataPlugin],
   });
 
-  await mkdir('./docs', { recursive: true });
-  await writeFile(\`./docs/\${pkg}.txt\`, result.outputs['llms'] || '');
+  console.log('Metadata:', info.metadata);
+}
 
-  console.log(\`  \${result.api.length} APIs, \${result.tokenCount} tokens\`);
-}`;
+extractWithMetadata();`;
+
+const openaiCompatibleExample = `import { extractPackageInfo, formatAsLlmsTxt } from '@oxog/npm-llms';
+import {
+  createXAIProvider,
+  createDeepSeekProvider,
+  createTogetherProvider,
+} from '@oxog/npm-llms/plugins/openai-ai';
+
+// Use x.ai (Grok)
+const xai = createXAIProvider({
+  apiKey: process.env.XAI_API_KEY,
+  model: 'grok-3-mini-fast',
+});
+
+// Use DeepSeek
+const deepseek = createDeepSeekProvider({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  model: 'deepseek-chat',
+});
+
+// Use Together AI
+const together = createTogetherProvider({
+  apiKey: process.env.TOGETHER_API_KEY,
+  model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+});
+
+async function testProviders() {
+  // Use any provider
+  const info = await extractPackageInfo('zod', {
+    aiProvider: xai, // or deepseek, together
+  });
+
+  console.log(formatAsLlmsTxt(info));
+}
+
+testProviders();`;
 
 export function Examples() {
   return (
-    <div className="container mx-auto px-4 py-12">
-      <article className="prose dark:prose-invert max-w-4xl mx-auto">
-        <h1>Examples</h1>
-        <p className="lead">
-          Code examples demonstrating common use cases for @oxog/npm-llms.
+    <div className="container py-12">
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-4xl font-bold mb-4">Examples</h1>
+        <p className="text-xl text-[var(--color-muted-foreground)] mb-12">
+          Learn npm-llms through practical examples.
         </p>
 
-        <h2>Basic Usage</h2>
-        <p>The simplest way to extract documentation:</p>
-        <div className="not-prose my-4">
-          <CodeBlock code={basicExample} language="typescript" filename="basic.ts" />
-        </div>
+        <div className="space-y-12">
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">Basic Extraction</h2>
+            <p className="text-[var(--color-muted-foreground)] mb-4">
+              Extract documentation from a single package and format as llms.txt:
+            </p>
+            <CodeBlock code={basicExample} language="typescript" filename="basic.ts" />
+          </section>
 
-        <h2>With Options</h2>
-        <p>Configure the extractor with caching and multiple output formats:</p>
-        <div className="not-prose my-4">
-          <CodeBlock code={withOptionsExample} language="typescript" filename="with-options.ts" />
-        </div>
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">Multiple Output Formats</h2>
+            <p className="text-[var(--color-muted-foreground)] mb-4">
+              Generate all available output formats for a package:
+            </p>
+            <CodeBlock code={multipleFormatsExample} language="typescript" filename="multiple-formats.ts" />
+          </section>
 
-        <h2>AI Enrichment with Claude</h2>
-        <p>Enhance documentation with AI-generated descriptions and examples:</p>
-        <div className="not-prose my-4">
-          <CodeBlock code={aiEnrichmentExample} language="typescript" filename="with-claude.ts" />
-        </div>
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">AI Enrichment</h2>
+            <p className="text-[var(--color-muted-foreground)] mb-4">
+              Enhance documentation with AI-generated content:
+            </p>
+            <CodeBlock code={aiEnrichmentExample} language="typescript" filename="ai-enrichment.ts" />
+          </section>
 
-        <h2>Local AI with Ollama</h2>
-        <p>Use local Ollama models for AI enrichment (no API key needed):</p>
-        <div className="not-prose my-4">
-          <CodeBlock code={ollamaExample} language="typescript" filename="with-ollama.ts" />
-        </div>
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">Batch Processing</h2>
+            <p className="text-[var(--color-muted-foreground)] mb-4">
+              Process multiple packages in parallel:
+            </p>
+            <CodeBlock code={batchProcessingExample} language="typescript" filename="batch.ts" />
+          </section>
 
-        <h2>Custom Plugin</h2>
-        <p>Create a custom plugin to extend functionality:</p>
-        <div className="not-prose my-4">
-          <CodeBlock code={customPluginExample} language="typescript" filename="custom-plugin.ts" />
-        </div>
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">Custom Plugin</h2>
+            <p className="text-[var(--color-muted-foreground)] mb-4">
+              Create a custom plugin to extend functionality:
+            </p>
+            <CodeBlock code={customPluginExample} language="typescript" filename="custom-plugin.ts" />
+          </section>
 
-        <h2>Batch Extraction</h2>
-        <p>Extract documentation for multiple packages:</p>
-        <div className="not-prose my-4">
-          <CodeBlock code={batchExample} language="typescript" filename="batch.ts" />
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">OpenAI-Compatible Providers</h2>
+            <p className="text-[var(--color-muted-foreground)] mb-4">
+              Use various OpenAI-compatible AI providers:
+            </p>
+            <CodeBlock code={openaiCompatibleExample} language="typescript" filename="openai-compatible.ts" />
+          </section>
         </div>
-      </article>
+      </div>
     </div>
   );
 }

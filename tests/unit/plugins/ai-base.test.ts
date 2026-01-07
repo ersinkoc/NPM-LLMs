@@ -410,4 +410,475 @@ myFunc('arg');
 
     expect(entry.description).toBe('A function that does something');
   });
+
+  it('should use whole response when no code blocks found', async () => {
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockResolvedValue('myFunc("hello")'),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(x: string): void',
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['examples'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(entry.examples).toHaveLength(1);
+    expect(entry.examples![0]).toBe('myFunc("hello")');
+  });
+});
+
+describe('generateEntryPrompt variations', () => {
+  it('should include existing description in prompt', async () => {
+    let capturedPrompt = '';
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockImplementation((prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('New description');
+      }),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(): void',
+      description: 'Existing description here',
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, {
+      tasks: ['descriptions'],
+      skipExisting: false, // Force enrichment even with existing description
+    });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(capturedPrompt).toContain('Current description: Existing description here');
+  });
+
+  it('should include params in prompt', async () => {
+    let capturedPrompt = '';
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockImplementation((prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('Description');
+      }),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(a: string, b: number): void',
+      params: [
+        { name: 'a', type: 'string' },
+        { name: 'b', type: 'number' },
+      ],
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['descriptions'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(capturedPrompt).toContain('Parameters:');
+    expect(capturedPrompt).toContain('- a: string');
+    expect(capturedPrompt).toContain('- b: number');
+  });
+
+  it('should include returns in prompt', async () => {
+    let capturedPrompt = '';
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockImplementation((prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('Description');
+      }),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(): string',
+      returns: { type: 'string' },
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['descriptions'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(capturedPrompt).toContain('Returns: string');
+  });
+});
+
+describe('summary generation edge cases', () => {
+  it('should handle summary generation errors', async () => {
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockRejectedValue(new Error('API Error')),
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['summary'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(mockContext.errors).toHaveLength(1);
+    expect(mockContext.errors[0].message).toBe('API Error');
+  });
+
+  it('should handle non-Error thrown in summary generation', async () => {
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockRejectedValue('String error'),
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['summary'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(mockContext.errors).toHaveLength(1);
+    expect(mockContext.errors[0].message).toBe('AI summary generation failed');
+  });
+
+  it('should not set description when readme is not available', async () => {
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockResolvedValue('Generated summary'),
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+      // No readme property
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['summary'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(mockContext.readme).toBeUndefined();
+  });
+});
+
+describe('enrichEntries edge cases', () => {
+  it('should skip entries with existing examples when skipExisting is true', async () => {
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockResolvedValue('Generated'),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(): void',
+      examples: ['existing example'],
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, {
+      tasks: ['examples'],
+      skipExisting: true,
+    });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(mockProvider.complete).not.toHaveBeenCalled();
+    expect(entry.examples).toEqual(['existing example']);
+  });
+
+  it('should handle both descriptions and examples tasks', async () => {
+    let callCount = 0;
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? 'Generated description' : '```ts\ncode()\n```';
+      }),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(): void',
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, {
+      tasks: ['descriptions', 'examples'],
+    });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(mockProvider.complete).toHaveBeenCalledTimes(2);
+    expect(entry.description).toBe('Generated description');
+    expect(entry.examples).toHaveLength(1);
+  });
+
+  it('should handle non-Error thrown during entry enrichment', async () => {
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockRejectedValue('String error'),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(): void',
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['descriptions'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(mockContext.errors).toHaveLength(1);
+    expect(mockContext.errors[0].message).toContain('AI enrichment failed for myFunc');
+  });
+});
+
+describe('generateSummaryPrompt', () => {
+  it('should include package info in summary prompt', async () => {
+    let capturedPrompt = '';
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockImplementation((prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('Summary');
+      }),
+    };
+
+    const mockContext: ExtractorContext = {
+      package: {
+        name: 'my-package',
+        version: '2.0.0',
+        description: 'A test package',
+        files: new Map(),
+      },
+      api: [
+        { kind: 'function', name: 'fn1', signature: 'function fn1(): void' },
+        { kind: 'function', name: 'fn2', signature: 'function fn2(): void' },
+        { kind: 'class', name: 'MyClass', signature: 'class MyClass' },
+        { kind: 'interface', name: 'IMyInterface', signature: 'interface IMyInterface' },
+        { kind: 'type', name: 'MyType', signature: 'type MyType' },
+      ],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['summary'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(capturedPrompt).toContain('Package: my-package@2.0.0');
+    expect(capturedPrompt).toContain('Description: A test package');
+    expect(capturedPrompt).toContain('Functions: 2');
+    expect(capturedPrompt).toContain('Classes: 1');
+    expect(capturedPrompt).toContain('Types: 2'); // interface + type
+    expect(capturedPrompt).toContain('function fn1');
+  });
+
+  it('should handle missing package description', async () => {
+    let capturedPrompt = '';
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockImplementation((prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('Summary');
+      }),
+    };
+
+    const mockContext: ExtractorContext = {
+      package: {
+        name: 'no-desc-pkg',
+        version: '1.0.0',
+        files: new Map(),
+      },
+      api: [],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['summary'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    expect(capturedPrompt).toContain('Description: No description available');
+  });
+});
+
+describe('params and returns tasks', () => {
+  it('should create plugin for params task', () => {
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockResolvedValue('{}'),
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['params'] });
+
+    expect(plugin.name).toBe('ai-enrichment-mock');
+    expect(plugin.category).toBe('ai');
+  });
+
+  it('should create plugin for returns task', () => {
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockResolvedValue('Result'),
+    };
+
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['returns'] });
+
+    expect(plugin.name).toBe('ai-enrichment-mock');
+    expect(plugin.category).toBe('ai');
+  });
 });

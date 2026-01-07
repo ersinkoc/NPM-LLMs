@@ -1,185 +1,325 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Package, Zap, Code2, Bot, Terminal, FileText, Shield, CheckCircle } from 'lucide-react';
-import { InstallTabs } from '../components/InstallTabs';
-import { CodeBlock } from '../components/CodeBlock';
-import { GITHUB_REPO, DESCRIPTION } from '../lib/constants';
+import { ArrowRight, Terminal, Zap, FileText, Sparkles, Code2, Puzzle, Database, Check, Github, Package, Cpu } from 'lucide-react';
+import { CodeBlock } from '@/components/code/CodeBlock';
+import { PACKAGE_NAME, FEATURES, AI_PROVIDERS, OPENAI_COMPATIBLE_PROVIDERS, GITHUB_URL } from '@/lib/constants';
 
-const features = [
-  {
-    icon: Package,
-    title: 'Zero Dependencies',
-    description: 'Pure Node.js built-ins only. No external runtime dependencies.',
-  },
-  {
-    icon: Zap,
-    title: 'Fast Extraction',
-    description: 'Stream-based tar parsing with intelligent caching.',
-  },
-  {
-    icon: Code2,
-    title: 'TypeScript Native',
-    description: 'Parses .d.ts files for accurate type information.',
-  },
-  {
-    icon: Bot,
-    title: 'AI Enrichment',
-    description: 'Optional AI-powered description and example generation.',
-  },
-  {
-    icon: Terminal,
-    title: 'CLI & API',
-    description: 'Use from command line or integrate into your code.',
-  },
-  {
-    icon: FileText,
-    title: 'Multiple Formats',
-    description: 'llms.txt, llms-full.txt, Markdown, JSON, and HTML.',
-  },
-];
+const iconMap = {
+  Zap,
+  FileText,
+  Sparkles,
+  Code2,
+  Puzzle,
+  Database,
+};
 
-const quickStartCode = `import { extract } from '@oxog/npm-llms';
+const cliExample = `# Extract documentation for any npm package
+npx @oxog/npm-llms extract lodash
 
-// Extract documentation for any NPM package
-const result = await extract('zod');
+# Generate all output formats
+npx @oxog/npm-llms extract express --all
 
-console.log(result.outputs['llms']); // llms.txt content
-console.log(result.api.length);      // API entries count`;
+# Output to specific directory
+npx @oxog/npm-llms extract react -o ./docs`;
 
-const cliExample = `# Generate llms.txt for a package
-npm-llms extract lodash --llms
+const apiExample = `import { extractPackageInfo, formatAsLlmsTxt } from '@oxog/npm-llms';
 
-# All formats with custom output
-npm-llms extract zod --all -o ./docs
+// Extract package information
+const info = await extractPackageInfo('lodash');
 
-# With AI enrichment
-npm-llms extract express --llms --ai claude`;
+// Generate llms.txt format
+const llmsTxt = formatAsLlmsTxt(info);
+console.log(llmsTxt);`;
 
-const stats = [
-  { label: 'Zero Dependencies', value: '0', icon: Package },
-  { label: 'TypeScript', value: '100%', icon: Code2 },
-  { label: 'Test Coverage', value: '95%+', icon: CheckCircle },
-  { label: 'Bundle Size', value: '<50KB', icon: Shield },
-];
+const aiEnrichmentExample = `import { extractPackageInfo } from '@oxog/npm-llms';
+import { createClaudeProvider } from '@oxog/npm-llms/plugins/claude-ai';
+
+// Create AI provider
+const claude = createClaudeProvider({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  model: 'claude-haiku-4-5',
+});
+
+// Extract with AI enrichment
+const info = await extractPackageInfo('axios', {
+  aiProvider: claude,
+});`;
 
 export function Home() {
   return (
-    <div>
-      {/* Hero */}
-      <section className="py-20 md:py-32">
-        <div className="container mx-auto px-4 text-center">
-          {/* @oxog namespace badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400 text-sm font-medium mb-6">
-            <Package className="h-4 w-4" />
-            <span className="font-mono">@oxog</span> • Zero runtime dependencies
-          </div>
+    <div className="overflow-hidden">
+      {/* Hero Section */}
+      <section className="relative min-h-[90vh] flex items-center">
+        {/* Background Effects */}
+        <div className="absolute inset-0 bg-gradient-mesh" />
+        <div className="absolute inset-0 bg-grid-pattern" />
 
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-            Extract LLM-optimized docs
-            <br />
-            <span className="text-primary-500">from any NPM package</span>
-          </h1>
+        {/* Animated Orbs */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl animate-pulse-glow" />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '1s' }} />
+        <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '0.5s' }} />
 
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-            {DESCRIPTION}
-          </p>
+        <div className="container relative z-10">
+          <div className="max-w-4xl mx-auto text-center">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 mb-6">
+              <span className="badge badge-primary">
+                <Sparkles className="w-3 h-3 mr-1" />
+                v1.0 Released
+              </span>
+              <span className="badge badge-cyan">
+                Zero Dependencies
+              </span>
+            </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <Link
-              to="/docs"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 text-white font-medium rounded-lg hover:bg-primary-600 transition-colors"
-            >
-              Get Started
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <a
-              href={`https://github.com/${GITHUB_REPO}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 py-3 border border-border rounded-lg font-medium hover:bg-muted transition-colors"
-            >
-              View on GitHub
-            </a>
-          </div>
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+              NPM Package Docs
+              <br />
+              <span className="text-gradient">for LLMs</span>
+            </h1>
 
-          {/* Stats bar */}
-          <div className="flex flex-wrap items-center justify-center gap-6 md:gap-10">
-            {stats.map((stat) => (
-              <div key={stat.label} className="flex items-center gap-2 text-sm">
-                <stat.icon className="h-4 w-4 text-primary-500" />
-                <span className="font-semibold">{stat.value}</span>
-                <span className="text-muted-foreground">{stat.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+            <p className="text-xl md:text-2xl text-[var(--color-muted-foreground)] mb-10 max-w-2xl mx-auto">
+              Extract, transform, and enrich npm package documentation into AI-ready formats.
+              Built for the age of AI assistants.
+            </p>
 
-      {/* Install */}
-      <section className="py-16 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold text-center mb-6">Quick Install</h2>
-            <InstallTabs />
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Features</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature) => (
-              <div
-                key={feature.title}
-                className="p-6 rounded-xl border border-border bg-card hover:shadow-lg transition-shadow"
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+              <Link
+                to="/docs"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-indigo-400 hover:no-underline transition-all shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40"
               >
-                <feature.icon className="h-10 w-10 text-primary-500 mb-4" />
-                <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
-                <p className="text-muted-foreground">{feature.description}</p>
+                Get Started
+                <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <a
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-foreground)] rounded-xl font-semibold hover:bg-[var(--color-muted)] hover:no-underline transition-all"
+              >
+                <Github className="h-5 w-5" />
+                View on GitHub
+              </a>
+            </div>
+
+            {/* Quick Install */}
+            <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-[var(--color-card)] border border-[var(--color-border)]">
+              <Terminal className="h-4 w-4 text-[var(--color-muted-foreground)]" />
+              <code className="text-sm font-mono">npm install {PACKAGE_NAME}</code>
+            </div>
+          </div>
+
+          {/* Terminal Preview */}
+          <div className="mt-16 max-w-3xl mx-auto">
+            <div className="gradient-border p-[1px] rounded-xl">
+              <div className="bg-[var(--color-card)] rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                  </div>
+                  <span className="text-sm font-mono text-[var(--color-muted-foreground)] ml-2">Terminal</span>
+                </div>
+                <CodeBlock code={cliExample} language="bash" showLineNumbers={false} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="py-16 border-y border-[var(--color-border)] bg-[var(--color-muted)]/50">
+        <div className="container">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {[
+              { label: 'Output Formats', value: '4+', icon: FileText },
+              { label: 'AI Providers', value: '5+', icon: Cpu },
+              { label: 'Dependencies', value: '0', icon: Package },
+              { label: 'TypeScript', value: '100%', icon: Code2 },
+            ].map((stat) => (
+              <div key={stat.label} className="text-center">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[var(--color-primary)]/10 mb-3">
+                  <stat.icon className="w-6 h-6 text-[var(--color-primary)]" />
+                </div>
+                <div className="text-3xl font-bold text-gradient mb-1">{stat.value}</div>
+                <div className="text-sm text-[var(--color-muted-foreground)]">{stat.label}</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Code Examples */}
-      <section className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Quick Start</h2>
-          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+      {/* Features Section */}
+      <section className="py-24 relative">
+        <div className="absolute inset-0 bg-dot-pattern opacity-50" />
+        <div className="container relative">
+          <div className="text-center mb-16">
+            <span className="badge badge-purple mb-4">Features</span>
+            <h2 className="text-4xl font-bold mb-4">Everything you need</h2>
+            <p className="text-[var(--color-muted-foreground)] max-w-2xl mx-auto text-lg">
+              A complete toolkit for generating AI-ready documentation from npm packages.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {FEATURES.map((feature, index) => {
+              const Icon = iconMap[feature.icon as keyof typeof iconMap];
+              const colors = ['indigo', 'cyan', 'purple', 'emerald', 'pink', 'amber'];
+              const color = colors[index % colors.length];
+
+              return (
+                <div
+                  key={feature.title}
+                  className="group p-6 bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] card-hover"
+                >
+                  <div
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors`}
+                    style={{
+                      backgroundColor: `rgba(var(--color-${color === 'indigo' ? 'primary' : color}), 0.1)`,
+                    }}
+                  >
+                    <Icon className={`h-6 w-6 text-${color}-500`} style={{ color: `var(--color-${color === 'indigo' ? 'primary' : color})` }} />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-2">{feature.title}</h3>
+                  <p className="text-[var(--color-muted-foreground)]">{feature.description}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* API Example Section */}
+      <section className="py-24 bg-[var(--color-muted)]/30">
+        <div className="container">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Code2 className="h-5 w-5 text-primary-500" />
-                Programmatic API
-              </h3>
-              <CodeBlock code={quickStartCode} language="typescript" />
+              <span className="badge badge-cyan mb-4">Simple API</span>
+              <h2 className="text-4xl font-bold mb-6">
+                Powerful yet <span className="text-gradient">simple</span>
+              </h2>
+              <p className="text-[var(--color-muted-foreground)] mb-8 text-lg">
+                Extract package information and format it for your specific needs with just a few lines of code.
+                Full TypeScript support included.
+              </p>
+              <ul className="space-y-4">
+                {[
+                  'Extract from npm registry or local packages',
+                  'Multiple output formats (llms.txt, Markdown, JSON)',
+                  'Smart token truncation for context limits',
+                  'TypeScript type definitions parsing',
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check className="w-3 h-3 text-emerald-500" />
+                    </div>
+                    <span className="text-[var(--color-muted-foreground)]">{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Terminal className="h-5 w-5 text-primary-500" />
-                CLI Usage
-              </h3>
-              <CodeBlock code={cliExample} language="bash" />
+            <div className="gradient-border p-[1px] rounded-xl">
+              <CodeBlock code={apiExample} language="typescript" filename="example.ts" />
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to get started?</h2>
-          <p className="text-lg text-muted-foreground mb-8">
-            Extract documentation for your favorite packages in seconds.
-          </p>
-          <Link
-            to="/docs"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 text-white font-medium rounded-lg hover:bg-primary-600 transition-colors"
-          >
-            Read the Documentation
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+      {/* AI Enrichment Section */}
+      <section className="py-24 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-mesh opacity-50" />
+        <div className="container relative">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div className="order-2 lg:order-1">
+              <div className="gradient-border p-[1px] rounded-xl">
+                <CodeBlock code={aiEnrichmentExample} language="typescript" filename="ai-example.ts" />
+              </div>
+            </div>
+            <div className="order-1 lg:order-2">
+              <span className="badge badge-purple mb-4">AI Enrichment</span>
+              <h2 className="text-4xl font-bold mb-6">
+                Supercharge with <span className="text-gradient">AI</span>
+              </h2>
+              <p className="text-[var(--color-muted-foreground)] mb-8 text-lg">
+                Enhance documentation with AI-generated summaries, examples, and explanations.
+                Support for multiple providers with easy configuration.
+              </p>
+
+              <div className="space-y-6">
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    Native Providers
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {AI_PROVIDERS.map((provider) => (
+                      <span
+                        key={provider.name}
+                        className="px-3 py-1.5 bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] text-sm font-medium"
+                      >
+                        {provider.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                    OpenAI-Compatible
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {OPENAI_COMPATIBLE_PROVIDERS.map((provider) => (
+                      <span
+                        key={provider.name}
+                        className="px-2 py-1 bg-[var(--color-muted)] rounded text-xs text-[var(--color-muted-foreground)]"
+                      >
+                        {provider.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-24 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-indigo-500/5 to-transparent" />
+        <div className="container relative">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6">
+              Ready to <span className="text-gradient">get started?</span>
+            </h2>
+            <p className="text-xl text-[var(--color-muted-foreground)] mb-10">
+              Install {PACKAGE_NAME} and start generating AI-ready documentation for your npm packages today.
+            </p>
+
+            <div className="gradient-border inline-block p-[1px] rounded-xl mb-10">
+              <div className="bg-[var(--color-card)] rounded-xl px-6 py-4">
+                <code className="text-lg font-mono">npm install {PACKAGE_NAME}</code>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                to="/docs"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-indigo-400 hover:no-underline transition-all shadow-lg shadow-indigo-500/25"
+              >
+                Read the Docs
+                <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <Link
+                to="/docs/examples"
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 border border-[var(--color-border)] rounded-xl font-semibold hover:bg-[var(--color-muted)] hover:no-underline transition-all"
+              >
+                View Examples
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
     </div>

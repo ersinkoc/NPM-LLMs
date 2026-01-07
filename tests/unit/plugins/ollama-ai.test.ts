@@ -24,6 +24,68 @@ describe('createOllamaProvider', () => {
       const provider = createOllamaProvider();
       expect(provider.isAvailable()).toBe(true);
     });
+
+    it('should return cached true after successful request', async () => {
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          response: 'Response',
+          done: true,
+        }),
+      };
+
+      global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+      const provider = createOllamaProvider();
+
+      // Make a successful request to set available = true
+      await provider.complete('test');
+
+      // isAvailable should now return cached true
+      expect(provider.isAvailable()).toBe(true);
+    });
+
+    it('should return cached false after connection refused', async () => {
+      const connectionError = new Error('fetch failed');
+      connectionError.message = 'connect ECONNREFUSED 127.0.0.1:11434';
+
+      global.fetch = vi.fn().mockRejectedValue(connectionError);
+
+      const provider = createOllamaProvider();
+
+      // Make a failed request to set available = false
+      try {
+        await provider.complete('test');
+      } catch {
+        // Expected to throw
+      }
+
+      // isAvailable should now return cached false
+      expect(provider.isAvailable()).toBe(false);
+    });
+
+    it('should return cached false after API error', async () => {
+      const mockResponse = {
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: vi.fn().mockResolvedValue('Error'),
+      };
+
+      global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+      const provider = createOllamaProvider();
+
+      // Make a failed request to set available = false
+      try {
+        await provider.complete('test');
+      } catch {
+        // Expected to throw
+      }
+
+      // isAvailable should now return cached false
+      expect(provider.isAvailable()).toBe(false);
+    });
   });
 
   describe('complete', () => {

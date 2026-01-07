@@ -514,4 +514,253 @@ This is the second line.
     expect(result.description).toContain('This is the first line');
     expect(result.description).toContain('This is the second line');
   });
+
+  it('should extract title from non-h1 heading when no h1 exists', () => {
+    const readme = `[![Badge](http://img.com/badge.png)](http://link.com)
+
+## Section Title
+
+Content here.
+`;
+
+    const result = parseReadme(readme);
+    // Since first section is level 2, it should try to find title from lines
+    expect(result.sections.length).toBeGreaterThan(0);
+  });
+
+  it('should skip badge-only lines when looking for title', () => {
+    const readme = `![Badge](http://img.com/badge.png)
+[![Another](http://img.com/another.png)](http://link.com)
+
+# Real Title
+
+Description here.
+`;
+
+    const result = parseReadme(readme);
+    expect(result.title).toBe('Real Title');
+  });
+
+  it('should extract title from first non-badge non-empty line', () => {
+    const readme = `![Badge](http://img.com/badge.png)
+
+## Some Title
+
+Content.
+`;
+
+    const result = parseReadme(readme);
+    // First heading found should be used as title
+    expect(result.sections[0]?.title).toBe('Some Title');
+  });
+});
+
+describe('extractInstallCommand edge cases', () => {
+  it('should extract pnpm add command', () => {
+    // Note: patterns are checked in order, so use pnpm add (not pnpm install which contains npm install)
+    const content = 'pnpm add my-package';
+    const result = extractInstallCommand(content);
+    expect(result).toBe('pnpm add my-package');
+  });
+
+  it('should extract install command from yarn add in code block', () => {
+    const content = `
+\`\`\`bash
+yarn add my-package
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('yarn add my-package');
+  });
+
+  it('should extract install command from pnpm add in code block', () => {
+    const content = `
+\`\`\`bash
+pnpm add my-package
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('pnpm add my-package');
+  });
+
+  it('should return undefined when code block contains no install command', () => {
+    const content = `
+\`\`\`bash
+echo "hello"
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBeUndefined();
+  });
+
+  it('should extract npm install from multi-line code block', () => {
+    const content = `
+\`\`\`bash
+# First comment
+cd project
+npm install my-package
+echo "done"
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('npm install my-package');
+  });
+
+  it('should extract yarn add from multi-line code block', () => {
+    const content = `
+\`\`\`bash
+# Install dependencies
+yarn add my-package
+# Done
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('yarn add my-package');
+  });
+
+  it('should extract pnpm add from multi-line code block', () => {
+    const content = `
+\`\`\`bash
+pnpm add my-package
+pnpm start
+\`\`\`
+`;
+    const result = extractInstallCommand(content);
+    expect(result).toBe('pnpm add my-package');
+  });
+});
+
+describe('findQuickStartFromCode edge cases', () => {
+  it('should find tsx code block as quick start', () => {
+    const readme = `# Package
+
+Install:
+
+\`\`\`tsx
+const Component = () => <div />;
+\`\`\`
+`;
+
+    const result = parseReadme(readme);
+    expect(result.quickStart).toContain('Component');
+  });
+
+  it('should find jsx code block as quick start', () => {
+    const readme = `# Package
+
+\`\`\`jsx
+const App = () => <App />;
+\`\`\`
+`;
+
+    const result = parseReadme(readme);
+    expect(result.quickStart).toContain('App');
+  });
+
+  it('should find ts code block as quick start', () => {
+    const readme = `# Package
+
+\`\`\`ts
+const x: number = 1;
+\`\`\`
+`;
+
+    const result = parseReadme(readme);
+    expect(result.quickStart).toContain('const x');
+  });
+
+  it('should find js code block as quick start', () => {
+    const readme = `# Package
+
+\`\`\`js
+const y = 2;
+\`\`\`
+`;
+
+    const result = parseReadme(readme);
+    expect(result.quickStart).toContain('const y');
+  });
+
+  it('should fallback to any code block if no JS/TS found', () => {
+    const readme = `# Package
+
+\`\`\`python
+print("hello")
+\`\`\`
+`;
+
+    const result = parseReadme(readme);
+    expect(result.quickStart).toContain('python');
+  });
+
+  it('should search after installation keyword', () => {
+    const readme = `# Package
+
+Some intro text.
+
+## Installation
+
+\`\`\`bash
+npm install pkg
+\`\`\`
+
+\`\`\`javascript
+const pkg = require('pkg');
+\`\`\`
+`;
+
+    const result = parseReadme(readme);
+    // Should find the JS code block after installation
+    expect(result.quickStart).toContain('require');
+  });
+});
+
+describe('extractBadges', () => {
+  it('should extract image-only badges', () => {
+    const readme = `# Package
+
+![Build Status](http://img.com/build.png)
+![Coverage](http://img.com/coverage.png)
+
+Description.
+`;
+
+    const result = parseReadme(readme);
+    expect(result.badges).toContain('Build Status');
+    expect(result.badges).toContain('Coverage');
+  });
+
+  it('should skip badges without alt text', () => {
+    const readme = `# Package
+
+[![](http://img.com/no-alt.png)](http://link.com)
+
+Description.
+`;
+
+    const result = parseReadme(readme);
+    // Badge with empty alt should not be included
+    expect(result.badges).not.toContain('');
+  });
+});
+
+describe('truncateReadme additional cases', () => {
+  it('should truncate sections when high-priority content exceeds limit', () => {
+    const readme: ParsedReadme = {
+      title: 'Title'.repeat(20), // 100 chars
+      description: 'Description'.repeat(20), // 220 chars
+      installation: 'Install'.repeat(10), // 70 chars
+      quickStart: 'Quick'.repeat(10), // 50 chars
+      api: 'API content',
+      examples: ['example1', 'example2'],
+      sections: [{ title: 'A', content: 'section content', level: 2, startIndex: 0, endIndex: 100 }],
+    };
+
+    // Total high-priority content > 50, so it will try to truncate
+    const result = truncateReadme(readme, 50);
+    // Low priority items (examples, api, sections) should be cleared
+    expect(result.examples).toHaveLength(0);
+    expect(result.api).toBeUndefined();
+    expect(result.sections).toHaveLength(0);
+  });
 });

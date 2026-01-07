@@ -6,8 +6,40 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   validatePackageName,
   parsePackageSpec,
+  fetchPackageMetadata,
+  downloadPackageFiles,
+  fetchPackage,
+  listVersions,
+  getDistTags,
 } from '../../../src/core/fetcher.js';
-import { ValidationError } from '../../../src/errors.js';
+import {
+  ValidationError,
+  PackageNotFoundError,
+  VersionNotFoundError,
+  DownloadError,
+} from '../../../src/errors.js';
+
+// Mock http utils
+vi.mock('../../../src/utils/http.js', () => ({
+  fetchJson: vi.fn(),
+  fetchGzipped: vi.fn(),
+  buildPackageUrl: vi.fn((name: string, version?: string, registry?: string) => {
+    const base = registry || 'https://registry.npmjs.org';
+    if (version) {
+      return `${base}/${name}/${version}`;
+    }
+    return `${base}/${name}`;
+  }),
+  DEFAULT_REGISTRY: 'https://registry.npmjs.org',
+}));
+
+// Mock tar utils
+vi.mock('../../../src/utils/tar.js', () => ({
+  extractTarToMap: vi.fn(),
+}));
+
+import { fetchJson, fetchGzipped } from '../../../src/utils/http.js';
+import { extractTarToMap } from '../../../src/utils/tar.js';
 
 describe('validatePackageName', () => {
   it('should accept valid package names', () => {
@@ -94,5 +126,530 @@ describe('parsePackageSpec', () => {
     const result = parsePackageSpec('lodash@');
     expect(result.name).toBe('lodash');
     expect(result.version).toBeUndefined();
+  });
+
+  it('should handle complex version tags', () => {
+    const result = parsePackageSpec('package@1.0.0-beta.1');
+    expect(result.name).toBe('package');
+    expect(result.version).toBe('1.0.0-beta.1');
+  });
+});
+
+describe('fetchPackageMetadata', () => {
+  const mockedFetchJson = vi.mocked(fetchJson);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should fetch metadata for latest version', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        description: 'A test package',
+        'dist-tags': { latest: '1.0.0' },
+        versions: {
+          '1.0.0': {
+            name: 'test-package',
+            version: '1.0.0',
+            description: 'A test package',
+            dist: { tarball: 'https://registry.npmjs.org/test-package/-/test-package-1.0.0.tgz' },
+          },
+        },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package');
+
+    expect(result.name).toBe('test-package');
+    expect(result.version).toBe('1.0.0');
+    expect(result.tarball).toContain('test-package-1.0.0.tgz');
+  });
+
+  it('should fetch specific version directly', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        version: '2.0.0',
+        dist: { tarball: 'https://registry.npmjs.org/test-package/-/test-package-2.0.0.tgz' },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package', '2.0.0');
+
+    expect(result.version).toBe('2.0.0');
+  });
+
+  it('should resolve dist-tag to version', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        'dist-tags': { latest: '1.0.0', beta: '2.0.0-beta' },
+        versions: {
+          '1.0.0': {
+            name: 'test-package',
+            version: '1.0.0',
+            dist: { tarball: 'https://example.com/1.0.0.tgz' },
+          },
+          '2.0.0-beta': {
+            name: 'test-package',
+            version: '2.0.0-beta',
+            dist: { tarball: 'https://example.com/2.0.0-beta.tgz' },
+          },
+        },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package', 'beta');
+
+    expect(result.version).toBe('2.0.0-beta');
+  });
+
+  it('should throw PackageNotFoundError for 404', async () => {
+    mockedFetchJson.mockRejectedValue(new DownloadError('HTTP 404 Not Found'));
+
+    await expect(fetchPackageMetadata('nonexistent-package')).rejects.toThrow(PackageNotFoundError);
+  });
+
+  it('should throw VersionNotFoundError for missing version', async () => {
+    // First call for specific version returns 404
+    mockedFetchJson
+      .mockRejectedValueOnce(new DownloadError('HTTP 404 Not Found'))
+      .mockResolvedValueOnce({
+        data: {
+          name: 'test-package',
+          'dist-tags': { latest: '1.0.0' },
+          versions: {
+            '1.0.0': {
+              name: 'test-package',
+              version: '1.0.0',
+              dist: { tarball: 'https://example.com/1.0.0.tgz' },
+            },
+          },
+        },
+      });
+
+    await expect(fetchPackageMetadata('test-package', '999.0.0')).rejects.toThrow(VersionNotFoundError);
+  });
+
+  it('should throw PackageNotFoundError for empty versions', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        versions: {},
+      },
+    });
+
+    await expect(fetchPackageMetadata('test-package')).rejects.toThrow(PackageNotFoundError);
+  });
+
+  it('should normalize string repository', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        version: '1.0.0',
+        repository: 'https://github.com/user/repo',
+        dist: { tarball: 'https://example.com/1.0.0.tgz' },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package', '1.0.0');
+
+    expect(result.repository).toEqual({
+      type: 'git',
+      url: 'https://github.com/user/repo',
+    });
+  });
+
+  it('should handle object repository', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        version: '1.0.0',
+        repository: { type: 'git', url: 'https://github.com/user/repo' },
+        dist: { tarball: 'https://example.com/1.0.0.tgz' },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package', '1.0.0');
+
+    expect(result.repository).toEqual({
+      type: 'git',
+      url: 'https://github.com/user/repo',
+    });
+  });
+
+  it('should use typings fallback for types', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        version: '1.0.0',
+        typings: 'dist/index.d.ts',
+        dist: { tarball: 'https://example.com/1.0.0.tgz' },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package', '1.0.0');
+
+    expect(result.types).toBe('dist/index.d.ts');
+  });
+
+  it('should throw for missing tarball', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        version: '1.0.0',
+        dist: {},
+      },
+    });
+
+    await expect(fetchPackageMetadata('test-package', '1.0.0')).rejects.toThrow(DownloadError);
+    await expect(fetchPackageMetadata('test-package', '1.0.0')).rejects.toThrow('missing tarball URL');
+  });
+
+  it('should fall back to full metadata for 404 on specific version', async () => {
+    mockedFetchJson
+      .mockRejectedValueOnce(new DownloadError('HTTP 404 Not Found'))
+      .mockResolvedValueOnce({
+        data: {
+          name: 'test-package',
+          'dist-tags': { latest: '1.0.0' },
+          versions: {
+            '1.0.0': {
+              name: 'test-package',
+              version: '1.0.0',
+              dist: { tarball: 'https://example.com/1.0.0.tgz' },
+            },
+          },
+        },
+      });
+
+    const result = await fetchPackageMetadata('test-package', '1.0.0');
+
+    expect(result.version).toBe('1.0.0');
+    expect(mockedFetchJson).toHaveBeenCalledTimes(2);
+  });
+
+  it('should resolve matching version prefix', async () => {
+    // First call for specific version "1" returns 404
+    mockedFetchJson
+      .mockRejectedValueOnce(new DownloadError('HTTP 404 Not Found'))
+      .mockResolvedValueOnce({
+        data: {
+          name: 'test-package',
+          'dist-tags': {},
+          versions: {
+            '1.0.0': {
+              name: 'test-package',
+              version: '1.0.0',
+              dist: { tarball: 'https://example.com/1.0.0.tgz' },
+            },
+            '1.0.1': {
+              name: 'test-package',
+              version: '1.0.1',
+              dist: { tarball: 'https://example.com/1.0.1.tgz' },
+            },
+            '2.0.0': {
+              name: 'test-package',
+              version: '2.0.0',
+              dist: { tarball: 'https://example.com/2.0.0.tgz' },
+            },
+          },
+        },
+      });
+
+    const result = await fetchPackageMetadata('test-package', '1');
+
+    // Should match highest version starting with '1'
+    expect(result.version).toBe('1.0.1');
+  });
+
+  it('should rethrow non-404 errors', async () => {
+    mockedFetchJson.mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchPackageMetadata('test-package')).rejects.toThrow('Network error');
+  });
+
+  it('should handle fallback when no latest dist-tag', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        'dist-tags': {},
+        versions: {
+          '1.0.0': {
+            name: 'test-package',
+            version: '1.0.0',
+            dist: { tarball: 'https://example.com/1.0.0.tgz' },
+          },
+          '2.0.0': {
+            name: 'test-package',
+            version: '2.0.0',
+            dist: { tarball: 'https://example.com/2.0.0.tgz' },
+          },
+        },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package');
+
+    // Should fallback to highest version
+    expect(result.version).toBe('2.0.0');
+  });
+
+  it('should include all metadata fields', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        version: '1.0.0',
+        description: 'Test description',
+        main: 'index.js',
+        types: 'index.d.ts',
+        exports: { '.': './dist/index.js' },
+        keywords: ['test', 'package'],
+        author: { name: 'Test Author', email: 'test@example.com' },
+        license: 'MIT',
+        homepage: 'https://example.com',
+        dist: { tarball: 'https://example.com/1.0.0.tgz' },
+      },
+    });
+
+    const result = await fetchPackageMetadata('test-package', '1.0.0');
+
+    expect(result.description).toBe('Test description');
+    expect(result.main).toBe('index.js');
+    expect(result.types).toBe('index.d.ts');
+    expect(result.exports).toEqual({ '.': './dist/index.js' });
+    expect(result.keywords).toEqual(['test', 'package']);
+    expect(result.author).toEqual({ name: 'Test Author', email: 'test@example.com' });
+    expect(result.license).toBe('MIT');
+    expect(result.homepage).toBe('https://example.com');
+  });
+});
+
+describe('downloadPackageFiles', () => {
+  const mockedFetchGzipped = vi.mocked(fetchGzipped);
+  const mockedExtractTarToMap = vi.mocked(extractTarToMap);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should download and extract tarball', async () => {
+    const mockBuffer = Buffer.from('mock tarball');
+    const mockFiles = new Map([
+      ['package/index.js', 'console.log("hello");'],
+      ['package/package.json', '{}'],
+    ]);
+
+    mockedFetchGzipped.mockResolvedValue(mockBuffer);
+    mockedExtractTarToMap.mockResolvedValue(mockFiles);
+
+    const result = await downloadPackageFiles('https://example.com/pkg.tgz');
+
+    expect(mockedFetchGzipped).toHaveBeenCalledWith('https://example.com/pkg.tgz', {});
+    expect(mockedExtractTarToMap).toHaveBeenCalledWith(mockBuffer);
+    expect(result).toBe(mockFiles);
+  });
+
+  it('should pass options to fetchGzipped', async () => {
+    mockedFetchGzipped.mockResolvedValue(Buffer.from(''));
+    mockedExtractTarToMap.mockResolvedValue(new Map());
+
+    await downloadPackageFiles('https://example.com/pkg.tgz', { timeout: 5000 });
+
+    expect(mockedFetchGzipped).toHaveBeenCalledWith('https://example.com/pkg.tgz', { timeout: 5000 });
+  });
+});
+
+describe('fetchPackage', () => {
+  const mockedFetchJson = vi.mocked(fetchJson);
+  const mockedFetchGzipped = vi.mocked(fetchGzipped);
+  const mockedExtractTarToMap = vi.mocked(extractTarToMap);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should fetch complete package with files', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        version: '1.0.0',
+        dist: { tarball: 'https://example.com/test-package-1.0.0.tgz' },
+      },
+    });
+    mockedFetchGzipped.mockResolvedValue(Buffer.from('mock'));
+    mockedExtractTarToMap.mockResolvedValue(
+      new Map([['package/index.js', 'code']])
+    );
+
+    const result = await fetchPackage('test-package@1.0.0');
+
+    expect(result.name).toBe('test-package');
+    expect(result.version).toBe('1.0.0');
+    expect(result.files.get('package/index.js')).toBe('code');
+  });
+
+  it('should use custom registry', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        'dist-tags': { latest: '1.0.0' },
+        versions: {
+          '1.0.0': {
+            name: 'test-package',
+            version: '1.0.0',
+            dist: { tarball: 'https://custom.registry.com/pkg.tgz' },
+          },
+        },
+      },
+    });
+    mockedFetchGzipped.mockResolvedValue(Buffer.from(''));
+    mockedExtractTarToMap.mockResolvedValue(new Map());
+
+    await fetchPackage('test-package', { registry: 'https://custom.registry.com' });
+
+    expect(mockedFetchJson).toHaveBeenCalled();
+  });
+
+  it('should fetch without version specified', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        'dist-tags': { latest: '3.0.0' },
+        versions: {
+          '3.0.0': {
+            name: 'test-package',
+            version: '3.0.0',
+            dist: { tarball: 'https://example.com/3.0.0.tgz' },
+          },
+        },
+      },
+    });
+    mockedFetchGzipped.mockResolvedValue(Buffer.from(''));
+    mockedExtractTarToMap.mockResolvedValue(new Map());
+
+    const result = await fetchPackage('test-package');
+
+    expect(result.version).toBe('3.0.0');
+  });
+});
+
+describe('listVersions', () => {
+  const mockedFetchJson = vi.mocked(fetchJson);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should list versions sorted newest first', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        versions: {
+          '1.0.0': {},
+          '2.0.0': {},
+          '1.5.0': {},
+        },
+      },
+    });
+
+    const result = await listVersions('test-package');
+
+    expect(result).toEqual(['2.0.0', '1.5.0', '1.0.0']);
+  });
+
+  it('should throw PackageNotFoundError for 404', async () => {
+    mockedFetchJson.mockRejectedValue(new DownloadError('HTTP 404 Not Found'));
+
+    await expect(listVersions('nonexistent')).rejects.toThrow(PackageNotFoundError);
+  });
+
+  it('should return empty array for no versions', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        versions: {},
+      },
+    });
+
+    const result = await listVersions('test-package');
+
+    expect(result).toEqual([]);
+  });
+
+  it('should rethrow non-404 errors', async () => {
+    mockedFetchJson.mockRejectedValue(new Error('Network error'));
+
+    await expect(listVersions('test-package')).rejects.toThrow('Network error');
+  });
+
+  it('should handle undefined versions', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+      },
+    });
+
+    const result = await listVersions('test-package');
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe('getDistTags', () => {
+  const mockedFetchJson = vi.mocked(fetchJson);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should return dist-tags', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+        'dist-tags': {
+          latest: '2.0.0',
+          beta: '3.0.0-beta.1',
+          next: '2.1.0',
+        },
+      },
+    });
+
+    const result = await getDistTags('test-package');
+
+    expect(result).toEqual({
+      latest: '2.0.0',
+      beta: '3.0.0-beta.1',
+      next: '2.1.0',
+    });
+  });
+
+  it('should return empty object if no dist-tags', async () => {
+    mockedFetchJson.mockResolvedValue({
+      data: {
+        name: 'test-package',
+      },
+    });
+
+    const result = await getDistTags('test-package');
+
+    expect(result).toEqual({});
+  });
+
+  it('should throw PackageNotFoundError for 404', async () => {
+    mockedFetchJson.mockRejectedValue(new DownloadError('HTTP 404 Not Found'));
+
+    await expect(getDistTags('nonexistent')).rejects.toThrow(PackageNotFoundError);
+  });
+
+  it('should validate package name', async () => {
+    await expect(getDistTags('')).rejects.toThrow(ValidationError);
+  });
+
+  it('should rethrow non-404 errors', async () => {
+    mockedFetchJson.mockRejectedValue(new Error('Network error'));
+
+    await expect(getDistTags('test-package')).rejects.toThrow('Network error');
   });
 });

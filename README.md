@@ -1,6 +1,6 @@
 # @oxog/npm-llms
 
-Extract LLM-optimized documentation (llms.txt, llms-full.txt) from any NPM package with zero runtime dependencies.
+Extract LLM-optimized documentation (llms.txt, llms-full.txt) from any NPM package with optional AI enrichment.
 
 [![npm version](https://img.shields.io/npm/v/@oxog/npm-llms.svg)](https://www.npmjs.com/package/@oxog/npm-llms)
 [![license](https://img.shields.io/npm/l/@oxog/npm-llms.svg)](https://github.com/ersinkoc/npm-llms/blob/main/LICENSE)
@@ -15,6 +15,20 @@ Extract LLM-optimized documentation (llms.txt, llms-full.txt) from any NPM packa
 - **Plugin Architecture** - Extensible micro-kernel design
 - **Built-in Caching** - File-based cache with TTL support
 - **CLI Included** - Command-line interface for quick extraction
+- **AI Enrichment** - Optional AI-powered documentation enhancement
+
+## AI Providers
+
+Enhance documentation with AI-generated descriptions and examples:
+
+| Provider | Model Examples |
+|----------|----------------|
+| **OpenAI** | gpt-4.1, gpt-4.1-nano, o3, o1 |
+| **Claude** | claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5 |
+| **Gemini** | gemini-3-flash-preview, gemini-2.5-pro |
+| **Groq** | llama-3.3-70b-versatile, llama-4-maverick |
+| **Ollama** | Any local model |
+| **OpenAI-Compatible** | x.ai, DeepSeek, Mistral, Together, Perplexity, OpenRouter |
 
 ## Installation
 
@@ -76,11 +90,57 @@ npm-llms cache-clear
 npm-llms --help
 ```
 
+## AI Enrichment
+
+Enhance extracted documentation with AI-generated content:
+
+```typescript
+import { createExtractor } from '@oxog/npm-llms';
+import { createClaudePlugin } from '@oxog/npm-llms/plugins';
+
+const extractor = createExtractor();
+
+// Use Claude for AI enrichment
+extractor.use(createClaudePlugin({
+  model: 'claude-haiku-4-5',
+  // apiKey: 'sk-...' // or set ANTHROPIC_API_KEY env var
+}));
+
+const result = await extractor.extract('zod');
+```
+
+### Using OpenAI-Compatible Providers
+
+```typescript
+import {
+  createOpenAIProvider,
+  createXAIProvider,
+  createDeepSeekProvider,
+  createMistralProvider,
+} from '@oxog/npm-llms/plugins';
+
+// x.ai (Grok)
+const xai = createXAIProvider({ model: 'grok-3-mini-fast' });
+
+// DeepSeek
+const deepseek = createDeepSeekProvider({ model: 'deepseek-chat' });
+
+// Mistral
+const mistral = createMistralProvider({ model: 'mistral-small-latest' });
+
+// Any OpenAI-compatible endpoint
+const custom = createOpenAIProvider({
+  baseUrl: 'https://my-api.example.com/v1',
+  apiKey: 'my-key',
+  model: 'my-model',
+});
+```
+
 ## Output Formats
 
 ### llms.txt
 
-Token-limited (default 2000 tokens) summary optimized for AI assistants. Includes:
+Token-limited (default 2000 tokens) summary optimized for AI assistants:
 - Package description
 - Installation instructions
 - Quick start examples
@@ -88,7 +148,7 @@ Token-limited (default 2000 tokens) summary optimized for AI assistants. Include
 
 ### llms-full.txt
 
-Complete API documentation with:
+Complete API documentation:
 - All exported functions with full signatures
 - All parameters and return types
 - All examples from JSDoc
@@ -96,7 +156,7 @@ Complete API documentation with:
 
 ### Markdown (API.md)
 
-Human-readable documentation with:
+Human-readable documentation:
 - Table of contents
 - Parameter tables
 - Code examples with syntax highlighting
@@ -163,15 +223,12 @@ const myPlugin = definePlugin({
   category: 'output',
 
   install(kernel) {
-    // Subscribe to events
     kernel.on('output:generate', async (context) => {
-      // Generate custom output
       context.outputs.set('custom', myCustomOutput);
     });
   },
 });
 
-// Use the plugin
 const extractor = createExtractor();
 extractor.use(myPlugin);
 ```
@@ -192,7 +249,7 @@ extractor.use(myPlugin);
 All errors extend `NpmLlmsError` with a `code` property:
 
 ```typescript
-import { extract, isNpmLlmsError, PackageNotFoundError } from '@oxog/npm-llms';
+import { extract, isNpmLlmsError } from '@oxog/npm-llms';
 
 try {
   await extract('nonexistent-package-12345');
@@ -222,7 +279,7 @@ try {
 ## Requirements
 
 - Node.js 18+
-- No runtime dependencies
+- No runtime dependencies (AI plugins are optional)
 
 ## License
 

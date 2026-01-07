@@ -436,3 +436,286 @@ describe('file type filtering', () => {
     expect(entries).toHaveLength(1);
   });
 });
+
+describe('GNU long name extension', () => {
+  /**
+   * Create a GNU long name header followed by the long name and actual file
+   */
+  function createGnuLongNameArchive(longName: string, content: string): Buffer {
+    const parts: Uint8Array[] = [];
+    const encoder = new TextEncoder();
+
+    // GNU Long Name header (type 'L')
+    const longNameHeader = createTarHeader({
+      name: '././@LongLink',
+      size: longName.length,
+      type: 'L',
+    });
+    parts.push(longNameHeader);
+
+    // Long name content padded to block
+    const longNameBytes = encoder.encode(longName);
+    const paddedLongName = new Uint8Array(Math.ceil(longNameBytes.length / BLOCK_SIZE) * BLOCK_SIZE);
+    paddedLongName.set(longNameBytes);
+    parts.push(paddedLongName);
+
+    // Actual file header with truncated name
+    const actualHeader = createTarHeader({
+      name: longName.slice(0, 99),
+      size: content.length,
+      type: '0',
+    });
+    parts.push(actualHeader);
+
+    // File content
+    const contentBytes = encoder.encode(content);
+    const paddedContent = new Uint8Array(Math.ceil(contentBytes.length / BLOCK_SIZE) * BLOCK_SIZE);
+    paddedContent.set(contentBytes);
+    parts.push(paddedContent);
+
+    // End marker
+    parts.push(new Uint8Array(BLOCK_SIZE * 2));
+
+    const total = parts.reduce((s, p) => s + p.length, 0);
+    const result = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      result.set(part, offset);
+      offset += part.length;
+    }
+
+    return Buffer.from(result);
+  }
+
+  it('should handle GNU long name for extraction', () => {
+    const longPath = 'package/' + 'very-long-directory-name/'.repeat(5) + 'index.js';
+    const archive = createGnuLongNameArchive(longPath, 'code');
+
+    const entries = Array.from(extractTarSync(archive));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].path).toContain('very-long-directory-name');
+  });
+
+  it('should handle GNU long name for listTarFiles', () => {
+    const longPath = 'package/' + 'very-long-directory-name/'.repeat(5) + 'test.ts';
+    const archive = createGnuLongNameArchive(longPath, 'code');
+
+    const files = listTarFiles(archive);
+
+    expect(files).toHaveLength(1);
+    expect(files[0]).toContain('very-long-directory-name');
+  });
+});
+
+describe('symlink handling', () => {
+  it('should skip symlinks in extractTarSync', () => {
+    const symlinkHeader = createTarHeader({
+      name: 'package/link.js',
+      size: 0,
+      type: '2', // Symlink type
+    });
+    const fileHeader = createTarHeader({
+      name: 'package/real.js',
+      size: 4,
+      type: '0',
+    });
+    const archive = Buffer.concat([
+      symlinkHeader,
+      fileHeader,
+      Buffer.from('code'),
+      Buffer.alloc(BLOCK_SIZE - 4),
+      Buffer.alloc(BLOCK_SIZE * 2),
+    ]);
+
+    const entries = Array.from(extractTarSync(archive));
+
+    // Only the real file should be extracted
+    expect(entries).toHaveLength(1);
+    expect(entries[0].path).toBe('real.js');
+  });
+
+  it('should skip hard links in extractTarSync', () => {
+    const linkHeader = createTarHeader({
+      name: 'package/hardlink.js',
+      size: 0,
+      type: '1', // Hard link type
+    });
+    const fileHeader = createTarHeader({
+      name: 'package/original.js',
+      size: 4,
+      type: '0',
+    });
+    const archive = Buffer.concat([
+      linkHeader,
+      fileHeader,
+      Buffer.from('code'),
+      Buffer.alloc(BLOCK_SIZE - 4),
+      Buffer.alloc(BLOCK_SIZE * 2),
+    ]);
+
+    const entries = Array.from(extractTarSync(archive));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].path).toBe('original.js');
+  });
+});
+
+describe('unsafe path handling', () => {
+  it('should skip files with path traversal in extractTarSync', () => {
+    // Create a file with path traversal directly in header
+    const header = new Uint8Array(BLOCK_SIZE);
+    const encoder = new TextEncoder();
+
+    // Name with path traversal
+    header.set(encoder.encode('../../../etc/passwd'), 0);
+    header.set(encoder.encode('0000644'), 100);
+    header.set(encoder.encode('00000000004'), 124);
+    header[156] = 48; // '0' for regular file
+    header.set(encoder.encode('ustar'), 257);
+
+    // Calculate checksum
+    let sum = 0;
+    for (let i = 0; i < BLOCK_SIZE; i++) {
+      if (i >= 148 && i < 156) sum += 32;
+      else sum += header[i];
+    }
+    header.set(encoder.encode(sum.toString(8).padStart(6, '0') + '\0 '), 148);
+
+    const archive = Buffer.concat([
+      header,
+      Buffer.from('evil'),
+      Buffer.alloc(BLOCK_SIZE - 4),
+      Buffer.alloc(BLOCK_SIZE * 2),
+    ]);
+
+    const entries = Array.from(extractTarSync(archive));
+
+    // File should be skipped due to path traversal
+    expect(entries).toHaveLength(0);
+  });
+
+  it('should skip files with path traversal in listTarFiles', () => {
+    const header = new Uint8Array(BLOCK_SIZE);
+    const encoder = new TextEncoder();
+
+    header.set(encoder.encode('../malicious.js'), 0);
+    header.set(encoder.encode('0000644'), 100);
+    header.set(encoder.encode('00000000004'), 124);
+    header[156] = 48;
+    header.set(encoder.encode('ustar'), 257);
+
+    let sum = 0;
+    for (let i = 0; i < BLOCK_SIZE; i++) {
+      if (i >= 148 && i < 156) sum += 32;
+      else sum += header[i];
+    }
+    header.set(encoder.encode(sum.toString(8).padStart(6, '0') + '\0 '), 148);
+
+    const archive = Buffer.concat([
+      header,
+      Buffer.from('evil'),
+      Buffer.alloc(BLOCK_SIZE - 4),
+      Buffer.alloc(BLOCK_SIZE * 2),
+    ]);
+
+    const files = listTarFiles(archive);
+
+    expect(files).toHaveLength(0);
+  });
+});
+
+describe('old-style file type', () => {
+  it('should handle empty type flag as regular file', () => {
+    // Old-style tar uses empty type for regular files
+    const header = new Uint8Array(BLOCK_SIZE);
+    const encoder = new TextEncoder();
+
+    header.set(encoder.encode('package/old-style.js'), 0);
+    header.set(encoder.encode('0000644'), 100);
+    header.set(encoder.encode('00000000004'), 124);
+    header[156] = 0; // Empty type (old-style regular file)
+    header.set(encoder.encode('ustar'), 257);
+
+    let sum = 0;
+    for (let i = 0; i < BLOCK_SIZE; i++) {
+      if (i >= 148 && i < 156) sum += 32;
+      else sum += header[i];
+    }
+    header.set(encoder.encode(sum.toString(8).padStart(6, '0') + '\0 '), 148);
+
+    const archive = Buffer.concat([
+      header,
+      Buffer.from('code'),
+      Buffer.alloc(BLOCK_SIZE - 4),
+      Buffer.alloc(BLOCK_SIZE * 2),
+    ]);
+
+    const entries = Array.from(extractTarSync(archive));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].path).toBe('old-style.js');
+  });
+});
+
+describe('checksum validation', () => {
+  it('should throw on invalid checksum', () => {
+    const header = new Uint8Array(BLOCK_SIZE);
+    const encoder = new TextEncoder();
+
+    header.set(encoder.encode('test.js'), 0);
+    header.set(encoder.encode('0000644'), 100);
+    header.set(encoder.encode('00000000004'), 124);
+    header[156] = 48;
+    header.set(encoder.encode('ustar'), 257);
+
+    // Set an incorrect checksum
+    header.set(encoder.encode('000001\0 '), 148); // Wrong checksum
+
+    expect(() => parseTarHeader(header, 0)).toThrow(TarError);
+  });
+
+  it('should allow zero checksum', () => {
+    const header = new Uint8Array(BLOCK_SIZE);
+    const encoder = new TextEncoder();
+
+    header.set(encoder.encode('test.js'), 0);
+    // Checksum field stays at 0 (all zeros)
+
+    // With most fields at 0, this should be okay
+    const result = parseTarHeader(header, 0);
+    expect(result).not.toBeNull();
+  });
+});
+
+describe('non-ustar format', () => {
+  it('should handle archives without ustar magic', () => {
+    const header = new Uint8Array(BLOCK_SIZE);
+    const encoder = new TextEncoder();
+
+    header.set(encoder.encode('package/simple.js'), 0);
+    header.set(encoder.encode('0000644'), 100);
+    header.set(encoder.encode('00000000004'), 124);
+    header[156] = 48;
+    // No ustar magic
+
+    let sum = 0;
+    for (let i = 0; i < BLOCK_SIZE; i++) {
+      if (i >= 148 && i < 156) sum += 32;
+      else sum += header[i];
+    }
+    header.set(encoder.encode(sum.toString(8).padStart(6, '0') + '\0 '), 148);
+
+    const archive = Buffer.concat([
+      header,
+      Buffer.from('code'),
+      Buffer.alloc(BLOCK_SIZE - 4),
+      Buffer.alloc(BLOCK_SIZE * 2),
+    ]);
+
+    const entries = Array.from(extractTarSync(archive));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].path).toBe('simple.js');
+  });
+});
