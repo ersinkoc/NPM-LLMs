@@ -51,6 +51,18 @@ describe('dts parser', () => {
       expect(operation?.kind).toBe('type');
     });
 
+    it('should parse generic type aliases with typeParams', () => {
+      const content = `
+export type Mapper<T, U> = (input: T) => U;
+`;
+      const result = parseDts(content);
+      const mapper = result.exports.find(e => e.name === 'Mapper');
+      expect(mapper).toBeDefined();
+      expect(mapper?.kind).toBe('type');
+      expect(mapper?.typeParams).toContain('T');
+      expect(mapper?.typeParams).toContain('U');
+    });
+
     it('should parse enums', () => {
       const content = readFileSync(join(FIXTURES_PATH, 'index.d.ts'), 'utf-8');
       const result = parseDts(content);
@@ -91,6 +103,25 @@ describe('dts parser', () => {
 
       const sumFn = result.exports.find((e) => e.name === 'sum');
       expect(sumFn?.deprecated).toBeDefined();
+    });
+
+    it('should preserve params without matching JSDoc', () => {
+      // Tests mergeParams returning original param when no jsdoc match
+      const content = `
+/**
+ * @param a First param
+ */
+export function test(a: string, b: number): void;
+`;
+      const result = parseDts(content);
+      const fn = result.exports.find(e => e.name === 'test');
+      expect(fn).toBeDefined();
+      expect(fn?.params).toHaveLength(2);
+      // First param has JSDoc description
+      expect(fn?.params?.[0].description).toBe('First param');
+      // Second param has no JSDoc, should still exist
+      expect(fn?.params?.[1].name).toBe('b');
+      expect(fn?.params?.[1].type).toBe('number');
     });
   });
 
@@ -358,6 +389,18 @@ export function test([first, second]: [string, number]): void;
       const fn = result.exports.find(e => e.name === 'test');
       expect(fn).toBeDefined();
       expect(fn?.params?.[0].name).toBe('options');
+    });
+
+    it('should skip destructured parameters without type annotation', () => {
+      // This tests findTypeColonIndex returning -1
+      const content = `
+export function test({ a, b }): void;
+`;
+      const result = parseDts(content);
+      const fn = result.exports.find(e => e.name === 'test');
+      expect(fn).toBeDefined();
+      // No params extracted when there's no type annotation
+      expect(fn?.params).toHaveLength(0);
     });
 
     it('should handle parameters with just name', () => {

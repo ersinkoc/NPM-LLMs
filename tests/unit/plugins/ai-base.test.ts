@@ -881,4 +881,90 @@ describe('params and returns tasks', () => {
     expect(plugin.name).toBe('ai-enrichment-mock');
     expect(plugin.category).toBe('ai');
   });
+
+  it('should enrich function with params task', async () => {
+    const capturedPrompts: string[] = [];
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockImplementation((prompt) => {
+        capturedPrompts.push(prompt);
+        return Promise.resolve('{"x": "The x parameter"}');
+      }),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(x: number): void',
+      params: [{ name: 'x', type: 'number' }],
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    // enrichEntries is only called for 'descriptions' or 'examples', so include descriptions
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['descriptions', 'params'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    // Should have made calls for both tasks
+    expect(capturedPrompts.length).toBeGreaterThanOrEqual(1);
+    // Check that params task generated a prompt with parameter info
+    const hasParamPrompt = capturedPrompts.some(p => p.toLowerCase().includes('parameter'));
+    expect(hasParamPrompt).toBe(true);
+  });
+
+  it('should enrich function with returns task', async () => {
+    const capturedPrompts: string[] = [];
+    const mockProvider: AIProvider = {
+      name: 'mock',
+      isAvailable: () => true,
+      complete: vi.fn().mockImplementation((prompt) => {
+        capturedPrompts.push(prompt);
+        return Promise.resolve('The return value');
+      }),
+    };
+
+    const entry: APIEntry = {
+      kind: 'function',
+      name: 'myFunc',
+      signature: 'function myFunc(): string',
+      returns: { type: 'string' },
+    };
+
+    const mockContext: ExtractorContext = {
+      package: { name: 'test', version: '1.0.0', files: new Map() },
+      api: [entry],
+      errors: [],
+      outputs: {},
+      tokenCount: 0,
+      truncated: false,
+    };
+
+    // enrichEntries is only called for 'descriptions' or 'examples', so include descriptions
+    const plugin = createAIEnrichmentPlugin(mockProvider, { tasks: ['descriptions', 'returns'] });
+
+    let handler: Function;
+    const mockKernel = { on: vi.fn((_, fn) => { handler = fn; }) };
+
+    plugin.install(mockKernel as any);
+    await handler!(mockContext);
+
+    // Should have made calls for both tasks
+    expect(capturedPrompts.length).toBeGreaterThanOrEqual(1);
+    // Check that returns task generated a prompt with return info
+    const hasReturnPrompt = capturedPrompts.some(p => p.toLowerCase().includes('return'));
+    expect(hasReturnPrompt).toBe(true);
+  });
 });

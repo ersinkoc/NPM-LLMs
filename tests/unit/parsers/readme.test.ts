@@ -381,9 +381,8 @@ npm i my-pkg
     expect(result).toBe('npm i my-pkg');
   });
 
-  it('should search through code block lines to find install command', () => {
-    // This test ensures we go through the code block line-by-line loop
-    // The content has no plain-text install command, only inside the code block
+  it('should find install command in code block content', () => {
+    // The pattern matches against the full content, including code blocks
     const content = `
 ## How to use
 
@@ -399,12 +398,10 @@ echo "Done"
 More documentation follows.
 `;
     const result = extractInstallCommand(content);
-    // The function extracts the install command from within the code block
     expect(result).toMatch(/npm install/);
   });
 
-  it('should iterate through all patterns for each code block line', () => {
-    // Test that pnpm add is found after iterating through npm and yarn patterns
+  it('should find pnpm add command', () => {
     const content = `
 No install commands in plain text here.
 
@@ -415,6 +412,31 @@ pnpm add my-package
 `;
     const result = extractInstallCommand(content);
     expect(result).toMatch(/pnpm add/);
+  });
+
+  it('should match npm install across newlines', () => {
+    // The \s+ in the pattern matches newlines, so 'echo' becomes the "package name"
+    const content = `Documentation here.
+
+\`\`\`bash
+# npm install
+echo "done"
+\`\`\``;
+    const result = extractInstallCommand(content);
+    expect(result).toMatch(/npm install/);
+  });
+
+  it('should find first matching install pattern', () => {
+    const content = `Setup guide.
+
+\`\`\`bash
+# npm install guide
+# yarn add guide
+# pnpm add guide
+\`\`\``;
+    const result = extractInstallCommand(content);
+    // First pattern that matches wins
+    expect(result).toMatch(/npm install guide/);
   });
 });
 

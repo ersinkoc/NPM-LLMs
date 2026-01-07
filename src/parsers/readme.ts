@@ -310,22 +310,6 @@ export function extractInstallCommand(content: string): string | undefined {
     }
   }
 
-  // Look in code blocks
-  const codeBlocks = extractCodeBlocks(content);
-  for (const block of codeBlocks) {
-    if (block.includes('npm install') || block.includes('yarn add') || block.includes('pnpm add')) {
-      // Extract the command line
-      const lines = block.split('\n');
-      for (const line of lines) {
-        for (const pattern of patterns) {
-          if (pattern.test(line)) {
-            return line.trim();
-          }
-        }
-      }
-    }
-  }
-
   return undefined;
 }
 

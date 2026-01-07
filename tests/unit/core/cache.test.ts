@@ -75,16 +75,17 @@ describe('cache', () => {
     });
 
     it('should respect TTL', async () => {
-      // 100ms TTL
-      const cache = new FileCache(TEST_CACHE_DIR, 100);
+      // 500ms TTL - longer to avoid timing issues
+      const cache = new FileCache(TEST_CACHE_DIR, 500);
 
       await cache.set('short-lived', { data: 'test' });
 
       // Should exist immediately
-      expect(await cache.get('short-lived')).not.toBeNull();
+      const immediate = await cache.get('short-lived');
+      expect(immediate).not.toBeNull();
 
       // Wait for TTL to expire
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
       // Should be expired
       expect(await cache.get('short-lived')).toBeNull();

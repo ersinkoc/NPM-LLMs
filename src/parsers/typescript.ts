@@ -166,25 +166,6 @@ function inferTypeFromDefault(defaultValue?: string): string {
 }
 
 /**
- * Extract body content from source
- */
-function extractBody(source: string, startIndex: number): string {
-  let depth = 0;
-  let i = startIndex;
-
-  while (i < source.length) {
-    if (source[i] === '{') depth++;
-    else if (source[i] === '}') {
-      depth--;
-      if (depth === 0) break;
-    }
-    i++;
-  }
-
-  return source.slice(startIndex + 1, i);
-}
-
-/**
  * Parse TypeScript source file
  * @param content - Source file content
  * @param filePath - Optional file path

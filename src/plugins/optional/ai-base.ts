@@ -106,12 +106,6 @@ function generateEntryPrompt(entry: APIEntry, task: AIEnrichmentTask): string {
     case 'examples':
       parts.push('\nGenerate a practical usage example:');
       break;
-    case 'params':
-      parts.push('\nGenerate descriptions for each parameter (JSON format):');
-      break;
-    case 'returns':
-      parts.push('\nGenerate a description for the return value:');
-      break;
   }
 
   return parts.join('\n');

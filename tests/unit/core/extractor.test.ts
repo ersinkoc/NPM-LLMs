@@ -303,3 +303,57 @@ describe('extract (quick function)', () => {
     expect(result).toBeDefined();
   });
 });
+
+describe('AI enrichment', () => {
+  it('should emit enrich events when enrichWithAI is enabled with ai option', async () => {
+    const extractor = createExtractor({
+      cache: { enabled: false }, // Disable cache to ensure full execution
+      ai: {
+        provider: 'openai',
+        apiKey: 'test-key',
+      },
+    });
+
+    // Use extract with enrichWithAI enabled
+    const result = await extractor.extract('test-package', {
+      enrichWithAI: true,
+      ignoreCache: true,
+      formats: ['llms'],
+    });
+
+    expect(result).toBeDefined();
+    expect(result.package.name).toBe('test-package');
+  });
+
+  it('should not emit enrich events when enrichWithAI is false', async () => {
+    const extractor = createExtractor({
+      cache: { enabled: false },
+      ai: {
+        provider: 'openai',
+        apiKey: 'test-key',
+      },
+    });
+
+    const result = await extractor.extract('test-package', {
+      enrichWithAI: false,
+      ignoreCache: true,
+      formats: ['llms'],
+    });
+
+    expect(result).toBeDefined();
+  });
+
+  it('should not emit enrich events when ai option is missing', async () => {
+    const extractor = createExtractor({
+      cache: { enabled: false },
+    });
+
+    const result = await extractor.extract('test-package', {
+      enrichWithAI: true, // enabled but no ai config
+      ignoreCache: true,
+      formats: ['llms'],
+    });
+
+    expect(result).toBeDefined();
+  });
+});

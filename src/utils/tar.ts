@@ -224,19 +224,14 @@ export function removePackagePrefix(path: string): string {
 
 /**
  * Determine entry type from tar type flag
- * @param type - Tar type flag
+ * Note: Only called for FILE types since directories/symlinks are filtered earlier
+ * @param _type - Tar type flag (unused since we only process files)
  * @returns Entry type
  */
-function getEntryType(type: string): TarEntry['type'] {
-  switch (type) {
-    case TAR_TYPES.DIRECTORY:
-      return 'directory';
-    case TAR_TYPES.SYMLINK:
-    case TAR_TYPES.LINK:
-      return 'symlink';
-    default:
-      return 'file';
-  }
+function getEntryType(_type: string): TarEntry['type'] {
+  // extractTarSync only calls this for FILE and FILE_ALT types
+  // Directories and symlinks are skipped before reaching here
+  return 'file';
 }
 
 /**
@@ -347,17 +342,10 @@ export function* extractTarSync(buffer: Buffer | ArrayBuffer): Generator<TarEntr
       continue;
     }
 
-    // Extract content
+    // Extract content - TextDecoder with UTF-8 (default) replaces invalid sequences
+    // instead of throwing, so binary files get replacement characters
     const content = data.slice(offset, offset + header.size);
-    let textContent: string;
-
-    try {
-      textContent = decoder.decode(content);
-    } catch {
-      // Skip binary files that fail to decode
-      offset += Math.ceil(header.size / BLOCK_SIZE) * BLOCK_SIZE;
-      continue;
-    }
+    const textContent = decoder.decode(content);
 
     yield {
       path,

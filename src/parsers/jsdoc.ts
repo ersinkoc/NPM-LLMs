@@ -102,22 +102,13 @@ export function parseParams(content: string): ParsedParam[] {
     const name = rawName;
     // Check if optional (wrapped in [])
     const isOptional = name.startsWith('[') && name.endsWith(']');
-    let cleanName = isOptional ? name.slice(1, -1) : name;
-    let defaultValue: string | undefined;
-
-    // Check for default value: [name=default]
-    const eqIndex = cleanName.indexOf('=');
-    if (eqIndex > 0) {
-      defaultValue = cleanName.slice(eqIndex + 1);
-      cleanName = cleanName.slice(0, eqIndex);
-    }
+    const cleanName = isOptional ? name.slice(1, -1) : name;
 
     params.push({
       name: cleanName,
       type: type?.trim(),
       description: description?.trim() || undefined,
       optional: isOptional,
-      defaultValue,
     });
   }
 

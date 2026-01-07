@@ -103,6 +103,24 @@ export function oldFunction(): void {
 
       expect(result.exports[0]!.deprecated).toContain('Use newFunction instead');
     });
+
+    it('should retain source params when JSDoc params do not match', () => {
+      // Tests line 369: mergeParams returns param when no matching jsdocParam
+      const content = `
+/**
+ * Process data
+ * @param wrongName - This param name doesn't match
+ */
+export function processData(actualName: string): void {
+}
+`;
+      const result = parseTypeScript(content);
+
+      expect(result.exports).toHaveLength(1);
+      expect(result.exports[0]!.params).toHaveLength(1);
+      expect(result.exports[0]!.params![0]!.name).toBe('actualName');
+      // Since JSDoc param 'wrongName' doesn't match 'actualName', source param is returned as-is
+    });
   });
 
   describe('arrow functions', () => {
@@ -137,6 +155,20 @@ export const greet = (name: string): string => "Hello " + name;
 
       expect(result.exports).toHaveLength(1);
       expect(result.exports[0]!.name).toBe('greet');
+    });
+
+    it('should parse arrow function with explicit type annotation', () => {
+      // Tests line 243: typeAnnotation branch for arrow functions
+      // Use a simple type annotation without => to avoid regex confusion
+      const content = `
+export const myFunc: MyFuncType = (x) => x + 1;
+`;
+      const result = parseTypeScript(content);
+
+      expect(result.exports).toHaveLength(1);
+      expect(result.exports[0]!.name).toBe('myFunc');
+      expect(result.exports[0]!.signature).toContain('const myFunc:');
+      expect(result.exports[0]!.signature).toContain('MyFuncType');
     });
   });
 

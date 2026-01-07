@@ -132,12 +132,8 @@ export class FileCache {
 
       return entry.data;
     } catch {
-      // Cache miss or corrupted entry
-      try {
-        await this.delete(key);
-      } catch {
-        // Ignore delete errors
-      }
+      // Cache miss or corrupted entry - delete silently
+      await this.delete(key).catch(() => {});
       return null;
     }
   }
