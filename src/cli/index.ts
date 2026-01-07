@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { createExtractor } from '../core/extractor.js';
 import type { OutputFormat, ContentPriority, AIProviderName } from '../types.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 /**
  * Output file names for each format
